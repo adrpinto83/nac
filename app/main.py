@@ -1,110 +1,68 @@
-"""Aplicación FastAPI principal."""
+"""Aplicación FastAPI principal - NAC System."""
 
 import logging
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-
-from app.config import get_settings
-from app.models import init_db, close_db
-from app.routers import auth, dashboard, users, devices, profiles, dns, stats
-from app.scheduler import init_scheduler, stop_scheduler
-from app.services.mikrotik_client import MikroTikClient
+from fastapi.responses import FileResponse
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Evento de startup y shutdown de la aplicación."""
-    # Startup
-    logger.info("Inicializando aplicación NAC...")
-    db = await init_db()
-    logger.info("Base de datos inicializada")
-
-    # Inicializar scheduler
-    settings = get_settings()
-    try:
-        scheduler = await init_scheduler(db, None)
-        logger.info("Scheduler inicializado con tareas periódicas")
-    except Exception as e:
-        logger.warning(f"Error inicializando scheduler: {e}")
-
-    yield
-
-    # Shutdown
-    logger.info("Cerrando conexiones...")
-    try:
-        await stop_scheduler()
-    except:
-        pass
-    await close_db()
-
-
+# Crear aplicación
 app = FastAPI(
     title="MikroTik NAC System",
-    description="Network Access Control para PDVSA",
+    description="Network Access Control",
     version="1.0.0",
-    lifespan=lifespan,
 )
-
-# Configuración
-settings = get_settings()
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routers API
-app.include_router(auth.router, prefix="/api")
-app.include_router(dashboard.router, prefix="/api")
-app.include_router(users.router, prefix="/api")
-app.include_router(devices.router, prefix="/api")
-app.include_router(profiles.router, prefix="/api")
-app.include_router(dns.router, prefix="/api")
-app.include_router(stats.router, prefix="/api")
-
-# Health check
+# Health check endpoint
 @app.get("/health")
 async def health():
-    """Health check del sistema."""
+    """Health check."""
     return {
         "status": "ok",
         "version": "1.0.0",
-        "environment": "development" if settings.DEBUG else "production",
+        "service": "nac-system",
     }
 
-
-# Archivos estáticos (frontend)
-from pathlib import Path
+# Servir frontend
 STATIC_DIR = Path(__file__).parent.parent / "static"
+
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.get("/")
     async def root():
-        """Sirve la página principal."""
-        from fastapi.responses import FileResponse
+        """Página principal."""
         return FileResponse(str(STATIC_DIR / "index.html"), media_type="text/html")
 else:
-    logger.warning(f"Directorio static no encontrado: {STATIC_DIR}")
+    @app.get("/")
+    async def root():
+        """Página principal (alternativa)."""
+        return {
+            "message": "NAC System running",
+            "docs": "/docs"
+        }
 
+# Endpoint de prueba
+@app.get("/api/status")
+async def status():
+    """Estado del sistema."""
+    return {
+        "status": "running",
+        "version": "1.0.0",
+    }
 
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8080,
-        reload=settings.DEBUG,
-        log_level=settings.LOG_LEVEL.lower(),
-    )
+logger.info("🚀 Aplicación NAC iniciada correctamente")
