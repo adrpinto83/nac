@@ -1,0 +1,37 @@
+# requirements.txt — Dependencias Python para NAC Container
+# Versiones fijas para reproducibilidad y estabilidad
+
+# Framework web
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Base de datos
+aiosqlite==0.22.1
+
+# Validación y serialización
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Autenticación y seguridad
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.1
+
+# HTTP client para REST API
+httpx==0.25.2
+
+# Utilidades
+python-multipart==0.0.6
+python-dotenv==1.0.0
+
+# Scheduler - Tareas periódicas
+apscheduler==3.10.4
+
+# Desarrollo y Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.12.0
+flake8==6.1.0
+
+# Producción
+gunicorn==21.2.0

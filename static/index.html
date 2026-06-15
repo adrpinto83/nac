@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MikroTik NAC - Panel de Control</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- LOGIN PAGE -->
+        <div id="loginPage" class="page active">
+            <div class="login-wrapper">
+                <div class="login-container">
+                    <div class="login-header">
+                        <h1>🔐 MikroTik NAC</h1>
+                        <p>Control de Acceso a Red</p>
+                    </div>
+
+                    <form id="loginForm" class="login-form" onsubmit="handleLogin(event)">
+                        <div class="form-group">
+                            <label for="username">Usuario</label>
+                            <input type="text" id="username" required placeholder="Ingrese su usuario">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password">Contraseña</label>
+                            <input type="password" id="password" required placeholder="Ingrese su contraseña">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-large">
+                            Ingresar
+                        </button>
+
+                        <div id="loginError" class="alert alert-error" style="display: none;"></div>
+                    </form>
+
+                    <div class="login-footer">
+                        <p>PDVSA • Sistema de Control de Acceso</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN APP -->
+        <div id="mainApp" class="page">
+            <!-- TOP NAVIGATION -->
+            <div class="top-nav">
+                <div class="nav-left">
+                    <button class="nav-toggle" onclick="toggleSidebar()">☰</button>
+                    <div class="nav-brand">
+                        <span class="brand-icon">🔐</span>
+                        <span class="brand-name">NAC System</span>
+                    </div>
+                </div>
+
+                <div class="nav-center">
+                    <div class="nav-breadcrumb">
+                        <span id="breadcrumb">Dashboard</span>
+                    </div>
+                </div>
+
+                <div class="nav-right">
+                    <div class="user-menu">
+                        <span id="currentUser" class="user-name"></span>
+                        <button class="btn-icon" onclick="handleLogout()" title="Cerrar sesión">
+                            🚪
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN WRAPPER -->
+            <div class="main-wrapper">
+                <!-- SIDEBAR -->
+                <aside class="sidebar" id="sidebar">
+                    <div class="sidebar-header">
+                        <h3>Menú</h3>
+                    </div>
+
+                    <nav class="sidebar-nav">
+                        <a href="#" class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard'); return false;">
+                            <span class="icon">📊</span>
+                            <span>Dashboard</span>
+                        </a>
+
+                        <a href="#" class="nav-item" data-page="users" onclick="navigateTo('users'); return false;">
+                            <span class="icon">👥</span>
+                            <span>Usuarios</span>
+                        </a>
+
+                        <a href="#" class="nav-item" id="adminLink" data-page="operators" onclick="navigateTo('operators'); return false;" style="display:none;">
+                            <span class="icon">🔑</span>
+                            <span>Operadores</span>
+                        </a>
+
+                        <a href="#" class="nav-item" id="dnsLink" data-page="dns" onclick="navigateTo('dns'); return false;" style="display:none;">
+                            <span class="icon">🌐</span>
+                            <span>DNS</span>
+                        </a>
+
+                        <a href="#" class="nav-item" id="qosLink" data-page="qos" onclick="navigateTo('qos'); return false;" style="display:none;">
+                            <span class="icon">⚡</span>
+                            <span>QoS</span>
+                        </a>
+
+                        <hr class="sidebar-divider">
+
+                        <a href="#" class="nav-item" data-page="audit" onclick="navigateTo('audit'); return false;">
+                            <span class="icon">📋</span>
+                            <span>Auditoría</span>
+                        </a>
+                    </nav>
+                </aside>
+
+                <!-- MAIN CONTENT -->
+                <main class="main-content">
+                    <!-- DASHBOARD -->
+                    <div id="dashboardContent" class="content-section active">
+                        <div class="page-header">
+                            <h1>📊 Dashboard</h1>
+                            <button class="btn btn-sm btn-secondary" onclick="loadDashboard()">🔄 Actualizar</button>
+                        </div>
+
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-icon">👥</div>
+                                <div class="metric-info">
+                                    <div class="metric-value" id="totalUsers">0</div>
+                                    <div class="metric-label">Total de Usuarios</div>
+                                </div>
+                            </div>
+
+                            <div class="metric-card">
+                                <div class="metric-icon">🟢</div>
+                                <div class="metric-info">
+                                    <div class="metric-value" id="activeUsers">0</div>
+                                    <div class="metric-label">Usuarios Activos</div>
+                                </div>
+                            </div>
+
+                            <div class="metric-card">
+                                <div class="metric-icon">🖥️</div>
+                                <div class="metric-info">
+                                    <div class="metric-value" id="totalDevices">0</div>
+                                    <div class="metric-label">Dispositivos</div>
+                                </div>
+                            </div>
+
+                            <div class="metric-card">
+                                <div class="metric-icon">✅</div>
+                                <div class="metric-info">
+                                    <div class="metric-value" id="systemStatus">OK</div>
+                                    <div class="metric-label">Sistema</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="content-row">
+                            <div class="card full-width">
+                                <div class="card-header">
+                                    <h3>🔴 Top 5 Consumidores (últimas 24h)</h3>
+                                </div>
+                                <div class="card-body">
+                                    <table id="topConsumersTable" class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Usuario</th>
+                                                <th>MAC</th>
+                                                <th>Consumo</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="topConsumersBody">
+                                            <tr><td colspan="3" class="text-center text-muted">Cargando...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="content-row">
+                            <div class="card full-width">
+                                <div class="card-header">
+                                    <h3>⚠️ Próximas Expiraciones</h3>
+                                </div>
+                                <div class="card-body">
+                                    <table id="expiringTable" class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Usuario</th>
+                                                <th>Cédula</th>
+                                                <th>Expira</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="expiringBody">
+                                            <tr><td colspan="3" class="text-center text-muted">Cargando...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- USERS -->
+                    <div id="usersContent" class="content-section">
+                        <div class="page-header">
+                            <h1>👥 Gestión de Usuarios</h1>
+                            <button class="btn btn-primary" onclick="toggleUserForm()">+ Nuevo Usuario</button>
+                        </div>
+
+                        <div id="userFormContainer" class="card" style="display:none; margin-bottom:20px;">
+                            <div class="card-header">
+                                <h3>Registrar Usuario</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="userForm" onsubmit="handleCreateUser(event)" class="form-layout">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Nombre Completo *</label>
+                                            <input type="text" id="fullName" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Cédula *</label>
+                                            <input type="text" id="cedula" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Cargo</label>
+                                            <input type="text" id="cargo">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Email</label>
+                                            <input type="email" id="email">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>MAC Address *</label>
+                                            <input type="text" id="macAddress" placeholder="AA:BB:CC:DD:EE:FF" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Perfil QoS *</label>
+                                            <select id="profile" required>
+                                                <option value="ADMIN">ADMIN</option>
+                                                <option value="PROFESIONAL">PROFESIONAL</option>
+                                                <option value="ESTANDAR" selected>ESTÁNDAR</option>
+                                                <option value="INVITADO">INVITADO</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-primary">Crear Usuario</button>
+                                        <button type="button" class="btn btn-secondary" onclick="toggleUserForm()">Cancelar</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Lista de Usuarios</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="filter-bar">
+                                    <input type="text" id="userSearch" placeholder="🔍 Buscar..." onkeyup="filterUsers()">
+                                    <select id="userStatusFilter" onchange="filterUsers()">
+                                        <option value="">Todos</option>
+                                        <option value="activo">Activo</option>
+                                        <option value="suspendido">Suspendido</option>
+                                    </select>
+                                </div>
+                                <table id="usersTable" class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Nombre</th>
+                                            <th>Cédula</th>
+                                            <th>MAC</th>
+                                            <th>Perfil</th>
+                                            <th>Estado</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usersBody">
+                                        <tr><td colspan="6" class="text-center text-muted">Cargando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- OPERATORS -->
+                    <div id="operatorsContent" class="content-section">
+                        <div class="page-header">
+                            <h1>🔑 Operadores</h1>
+                            <button class="btn btn-primary" onclick="toggleOperatorForm()">+ Nuevo Operador</button>
+                        </div>
+
+                        <div id="operatorFormContainer" class="card" style="display:none; margin-bottom:20px;">
+                            <div class="card-header">
+                                <h3>Crear Operador</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="operatorForm" onsubmit="handleCreateOperator(event)" class="form-layout">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Usuario *</label>
+                                            <input type="text" id="opUsername" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Contraseña *</label>
+                                            <input type="password" id="opPassword" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Nombre Completo</label>
+                                            <input type="text" id="opFullName">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Rol *</label>
+                                            <select id="opRole" required>
+                                                <option value="ADMIN">ADMIN</option>
+                                                <option value="SOPORTE">SOPORTE</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-primary">Crear Operador</button>
+                                        <button type="button" class="btn btn-secondary" onclick="toggleOperatorForm()">Cancelar</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Operadores</h3>
+                            </div>
+                            <div class="card-body">
+                                <table id="operatorsTable" class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Usuario</th>
+                                            <th>Nombre</th>
+                                            <th>Rol</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="operatorsBody">
+                                        <tr><td colspan="4" class="text-center text-muted">Cargando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DNS -->
+                    <div id="dnsContent" class="content-section">
+                        <div class="page-header">
+                            <h1>🌐 Control DNS</h1>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Categorías</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="categoriesContainer">Cargando...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- QoS -->
+                    <div id="qosContent" class="content-section">
+                        <div class="page-header">
+                            <h1>⚡ Ancho de Banda</h1>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Perfiles QoS</h3>
+                            </div>
+                            <div class="card-body">
+                                <table id="profilesTable" class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Perfil</th>
+                                            <th>Descarga</th>
+                                            <th>Carga</th>
+                                            <th>Prioridad</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="profilesBody">
+                                        <tr><td colspan="4" class="text-center text-muted">Cargando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AUDIT -->
+                    <div id="auditContent" class="content-section">
+                        <div class="page-header">
+                            <h1>📋 Log de Auditoría</h1>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Actividad</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="filter-bar">
+                                    <input type="text" id="auditSearch" placeholder="🔍 Buscar..." onkeyup="filterAudit()">
+                                </div>
+                                <table id="auditTable" class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Operador</th>
+                                            <th>Acción</th>
+                                            <th>Recurso</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="auditBody">
+                                        <tr><td colspan="5" class="text-center text-muted">Cargando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
