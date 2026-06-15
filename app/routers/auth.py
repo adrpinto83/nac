@@ -1,80 +1,108 @@
-"""Router de autenticación."""
+"""Authentication router."""
 
-from fastapi import APIRouter, HTTPException, status, Depends
-from app.models import get_db, Database
-from app.auth import AuthService
-from app.schemas import LoginRequest, TokenResponse, UserResponse, OperatorCreate, OperatorResponse
-from app.dependencies import get_current_user
+from fastapi import APIRouter, HTTPException, status
+from datetime import timedelta
+from pydantic import BaseModel
+from app.database import get_db
+from app.security import (
+    create_access_token, verify_password, decode_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES, hash_password
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: Database = Depends(get_db)):
-    """Login de usuario o operador."""
-    auth_service = AuthService(db)
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
-    # Intentar login de usuario
-    user = await auth_service.authenticate_user(request.username, request.password)
-    if user:
-        token = auth_service.generate_token(user["id"], user["username"], user["role"])
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": UserResponse(**user),
-        }
 
-    # Intentar login de operador
-    operator = await auth_service.authenticate_operator(request.username, request.password)
-    if operator:
-        token = auth_service.generate_token(operator["id"], operator["username"], operator["role"])
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": OperatorResponse(**operator),
-        }
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid credentials",
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    full_name: str
+    email: str
+    role: str
+    is_active: bool
+
+
+@router.post("/login", response_model=Token)
+async def login(request: LoginRequest):
+    """Login and get access token."""
+    db = await get_db()
+
+    cursor = await db.execute(
+        "SELECT id, username, password_hash, role, is_active FROM users WHERE username = ?",
+        (request.username,)
     )
+    user = await cursor.fetchone()
+    await db.close()
+
+    if not user or not verify_password(request.password, user[2]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+
+    if not user[4]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is inactive",
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user[1]},
+        expires_delta=access_token_expires
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: dict = Depends(get_current_user), db: Database = Depends(get_db)):
-    """Obtiene información del usuario actual."""
-    user_model = __import__("app.models", fromlist=["UserModel"]).UserModel(db)
-    user = await user_model.get_user_by_id(current_user["user_id"])
+async def get_me(authorization: str = None):
+    """Get current user info."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    username = payload.get("sub")
+    db = await get_db()
+
+    cursor = await db.execute(
+        "SELECT id, username, full_name, email, role, is_active FROM users WHERE username = ?",
+        (username,)
+    )
+    user = await cursor.fetchone()
+    await db.close()
+
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return UserResponse(**user)
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return UserResponse(
+        id=user[0],
+        username=user[1],
+        full_name=user[2],
+        email=user[3],
+        role=user[4],
+        is_active=bool(user[5])
+    )
 
 
 @router.post("/logout")
 async def logout():
-    """Logout (el cliente elimina el token)."""
+    """Logout (client removes token)."""
     return {"message": "Logged out successfully"}
-
-
-@router.post("/operators", response_model=OperatorResponse)
-async def create_operator(
-    operator: OperatorCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Database = Depends(get_db),
-):
-    """Crea nuevo operador (solo SUPERADMIN)."""
-    if current_user.get("role") != "SUPERADMIN":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
-
-    auth_service = AuthService(db)
-    new_operator = await auth_service.create_operator(
-        username=operator.username,
-        password=operator.password,
-        role=operator.role,
-        created_by=current_user["user_id"],
-    )
-
-    if not new_operator:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Operator already exists")
-
-    return OperatorResponse(**new_operator)

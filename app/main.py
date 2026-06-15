@@ -2,20 +2,37 @@
 
 import logging
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from app.database import init_db
+from app.routers import auth, users, devices
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan events (startup/shutdown)."""
+    # Startup
+    logger.info("Inicializando base de datos...")
+    await init_db()
+    logger.info("Base de datos inicializada")
+    yield
+    # Shutdown
+    logger.info("Cerrando aplicación...")
+
 
 # Crear aplicación
 app = FastAPI(
     title="MikroTik NAC System",
     description="Network Access Control",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS
@@ -26,6 +43,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Routers
+app.include_router(auth.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(devices.router, prefix="/api")
 
 # Health check endpoint
 @app.get("/health")
@@ -63,6 +85,7 @@ async def status():
     return {
         "status": "running",
         "version": "1.0.0",
+        "authentication": "enabled",
     }
 
 logger.info("🚀 Aplicación NAC iniciada correctamente")
