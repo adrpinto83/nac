@@ -44,11 +44,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
-app.include_router(auth.router, prefix="/api")
-app.include_router(users.router, prefix="/api")
-app.include_router(devices.router, prefix="/api")
-
 # Health check endpoint
 @app.get("/health")
 async def health():
@@ -59,24 +54,23 @@ async def health():
         "service": "nac-system",
     }
 
-# Servir frontend
+# Servir frontend - DEBE SER ANTES DE ROUTERS
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
 if STATIC_DIR.exists():
+    # Mount static files
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    @app.get("/")
+    # Serve index.html
+    @app.get("/", response_class=FileResponse)
     async def root():
         """Página principal."""
-        return FileResponse(str(STATIC_DIR / "index.html"), media_type="text/html")
-else:
-    @app.get("/")
-    async def root():
-        """Página principal (alternativa)."""
-        return {
-            "message": "NAC System running",
-            "docs": "/docs"
-        }
+        return FileResponse(str(STATIC_DIR / "index.html"))
+
+# Routers - DESPUÉS DE STATIC
+app.include_router(auth.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(devices.router, prefix="/api")
 
 # Endpoint de prueba
 @app.get("/api/status")
