@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.models import init_db, close_db
 from app.routers import auth, dashboard, users, devices, profiles, dns, stats
 from app.scheduler import init_scheduler, stop_scheduler
-from routeros.client import RouterOSClient
+from app.services.mikrotik_client import MikroTikClient
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
