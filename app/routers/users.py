@@ -2,28 +2,66 @@
 
 from fastapi import APIRouter, HTTPException, status, Header
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from app.database import get_db
 from app.security import hash_password, decode_token
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+class DeviceInfo(BaseModel):
+    id: int
+    mac_address: str
+    ip_address: Optional[str]
+    hostname: Optional[str]
+    device_type: str
+    manufacturer: Optional[str]
+    model: Optional[str]
+    os_type: Optional[str]
+    status: str
+    last_seen: Optional[str]
+
+
 class UserCreate(BaseModel):
     username: str
     password: str
-    full_name: str = ""
-    email: str = ""
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    company: Optional[str] = None
     role: str = "user"
+
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
 
 
 class UserResponse(BaseModel):
     id: int
     username: str
     full_name: str
-    email: str
+    email: Optional[str]
+    phone: Optional[str]
+    department: Optional[str]
+    position: Optional[str]
+    company: Optional[str]
     role: str
     is_active: bool
+    created_at: Optional[str]
+
+
+class UserDetailResponse(UserResponse):
+    devices: List[DeviceInfo]
+    device_count: int
+    last_login: Optional[str]
 
 
 async def verify_token(authorization: str = None) -> dict:
@@ -40,14 +78,15 @@ async def verify_token(authorization: str = None) -> dict:
     return payload
 
 
-@router.get("/", response_model=list[UserResponse])
+@router.get("/", response_model=List[UserResponse])
 async def list_users(authorization: Optional[str] = Header(None)):
     """List all users."""
     await verify_token(authorization)
 
     db = await get_db()
     cursor = await db.execute(
-        "SELECT id, username, full_name, email, role, is_active FROM users"
+        """SELECT id, username, full_name, email, phone, department, position, company, role, is_active, created_at
+           FROM users ORDER BY created_at DESC"""
     )
     users = await cursor.fetchall()
     await db.close()
@@ -58,8 +97,13 @@ async def list_users(authorization: Optional[str] = Header(None)):
             username=u[1],
             full_name=u[2],
             email=u[3],
-            role=u[4],
-            is_active=bool(u[5])
+            phone=u[4],
+            department=u[5],
+            position=u[6],
+            company=u[7],
+            role=u[8],
+            is_active=bool(u[9]),
+            created_at=u[10]
         )
         for u in users
     ]
@@ -67,7 +111,7 @@ async def list_users(authorization: Optional[str] = Header(None)):
 
 @router.post("/", response_model=UserResponse)
 async def create_user(user: UserCreate, authorization: Optional[str] = Header(None)):
-    """Create new user."""
+    """Create new user with detailed information."""
     await verify_token(authorization)
 
     password_hash = hash_password(user.password)
@@ -75,8 +119,11 @@ async def create_user(user: UserCreate, authorization: Optional[str] = Header(No
 
     try:
         cursor = await db.execute(
-            "INSERT INTO users (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)",
-            (user.username, password_hash, user.full_name, user.email, user.role)
+            """INSERT INTO users
+               (username, password_hash, full_name, email, phone, department, position, company, role)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user.username, password_hash, user.full_name, user.email, user.phone,
+             user.department, user.position, user.company, user.role)
         )
         await db.commit()
         user_id = cursor.lastrowid
@@ -86,8 +133,13 @@ async def create_user(user: UserCreate, authorization: Optional[str] = Header(No
             username=user.username,
             full_name=user.full_name,
             email=user.email,
+            phone=user.phone,
+            department=user.department,
+            position=user.position,
+            company=user.company,
             role=user.role,
-            is_active=True
+            is_active=True,
+            created_at=None
         )
     except Exception as e:
         await db.close()
@@ -96,14 +148,15 @@ async def create_user(user: UserCreate, authorization: Optional[str] = Header(No
         await db.close()
 
 
-@router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, authorization: Optional[str] = Header(None)):
-    """Get user by ID."""
+@router.get("/{user_id}", response_model=UserDetailResponse)
+async def get_user_detail(user_id: int, authorization: Optional[str] = Header(None)):
+    """Get user with all devices."""
     await verify_token(authorization)
 
     db = await get_db()
     cursor = await db.execute(
-        "SELECT id, username, full_name, email, role, is_active FROM users WHERE id = ?",
+        """SELECT id, username, full_name, email, phone, department, position, company, role, is_active, created_at, last_login
+           FROM users WHERE id = ?""",
         (user_id,)
     )
     user = await cursor.fetchone()
@@ -112,19 +165,124 @@ async def get_user(user_id: int, authorization: Optional[str] = Header(None)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Get devices for this user
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT id, mac_address, ip_address, hostname, device_type, manufacturer, model, os_type, status, last_seen
+           FROM devices WHERE user_id = ? ORDER BY created_at DESC""",
+        (user_id,)
+    )
+    devices = await cursor.fetchall()
+    await db.close()
+
+    device_list = [
+        DeviceInfo(
+            id=d[0],
+            mac_address=d[1],
+            ip_address=d[2],
+            hostname=d[3],
+            device_type=d[4] or "unknown",
+            manufacturer=d[5],
+            model=d[6],
+            os_type=d[7],
+            status=d[8],
+            last_seen=d[9]
+        )
+        for d in devices
+    ]
+
+    return UserDetailResponse(
+        id=user[0],
+        username=user[1],
+        full_name=user[2],
+        email=user[3],
+        phone=user[4],
+        department=user[5],
+        position=user[6],
+        company=user[7],
+        role=user[8],
+        is_active=bool(user[9]),
+        created_at=user[10],
+        devices=device_list,
+        device_count=len(device_list),
+        last_login=user[11]
+    )
+
+
+@router.put("/{user_id}", response_model=UserResponse)
+async def update_user(user_id: int, update: UserUpdate, authorization: Optional[str] = Header(None)):
+    """Update user information."""
+    await verify_token(authorization)
+
+    db = await get_db()
+
+    # Check user exists
+    cursor = await db.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not await cursor.fetchone():
+        await db.close()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Build update query
+    updates = []
+    values = []
+
+    if update.full_name is not None:
+        updates.append("full_name = ?")
+        values.append(update.full_name)
+    if update.email is not None:
+        updates.append("email = ?")
+        values.append(update.email)
+    if update.phone is not None:
+        updates.append("phone = ?")
+        values.append(update.phone)
+    if update.department is not None:
+        updates.append("department = ?")
+        values.append(update.department)
+    if update.position is not None:
+        updates.append("position = ?")
+        values.append(update.position)
+    if update.company is not None:
+        updates.append("company = ?")
+        values.append(update.company)
+    if update.role is not None:
+        updates.append("role = ?")
+        values.append(update.role)
+
+    if updates:
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        values.append(user_id)
+
+        query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+        await db.execute(query, values)
+        await db.commit()
+
+    # Get updated user
+    cursor = await db.execute(
+        """SELECT id, username, full_name, email, phone, department, position, company, role, is_active, created_at
+           FROM users WHERE id = ?""",
+        (user_id,)
+    )
+    user = await cursor.fetchone()
+    await db.close()
+
     return UserResponse(
         id=user[0],
         username=user[1],
         full_name=user[2],
         email=user[3],
-        role=user[4],
-        is_active=bool(user[5])
+        phone=user[4],
+        department=user[5],
+        position=user[6],
+        company=user[7],
+        role=user[8],
+        is_active=bool(user[9]),
+        created_at=user[10]
     )
 
 
 @router.delete("/{user_id}")
 async def delete_user(user_id: int, authorization: Optional[str] = Header(None)):
-    """Delete user."""
+    """Delete user and all associated devices."""
     await verify_token(authorization)
 
     db = await get_db()
@@ -132,4 +290,43 @@ async def delete_user(user_id: int, authorization: Optional[str] = Header(None))
     await db.commit()
     await db.close()
 
-    return {"message": "User deleted"}
+    return {"message": "User deleted successfully"}
+
+
+@router.get("/{user_id}/devices", response_model=List[DeviceInfo])
+async def get_user_devices(user_id: int, authorization: Optional[str] = Header(None)):
+    """Get all devices for a specific user."""
+    await verify_token(authorization)
+
+    db = await get_db()
+
+    # Check user exists
+    cursor = await db.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not await cursor.fetchone():
+        await db.close()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get devices
+    cursor = await db.execute(
+        """SELECT id, mac_address, ip_address, hostname, device_type, manufacturer, model, os_type, status, last_seen
+           FROM devices WHERE user_id = ? ORDER BY created_at DESC""",
+        (user_id,)
+    )
+    devices = await cursor.fetchall()
+    await db.close()
+
+    return [
+        DeviceInfo(
+            id=d[0],
+            mac_address=d[1],
+            ip_address=d[2],
+            hostname=d[3],
+            device_type=d[4] or "unknown",
+            manufacturer=d[5],
+            model=d[6],
+            os_type=d[7],
+            status=d[8],
+            last_seen=d[9]
+        )
+        for d in devices
+    ]
