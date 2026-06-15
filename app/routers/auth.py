@@ -1,5 +1,6 @@
 """Authentication router."""
 
+import logging
 from fastapi import APIRouter, HTTPException, status, Header
 from datetime import timedelta
 from pydantic import BaseModel
@@ -9,6 +10,8 @@ from app.security import (
     create_access_token, verify_password, decode_token,
     ACCESS_TOKEN_EXPIRE_MINUTES, hash_password
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -253,7 +256,32 @@ async def approve_user(user_id: int, authorization: Optional[str] = Header(None)
         (user_id,)
     )
     await db.commit()
+
+    # Get user's devices to whitelist them
+    cursor = await db.execute(
+        "SELECT username FROM users WHERE id = ?",
+        (user_id,)
+    )
+    user_info = await cursor.fetchone()
+    user_username = user_info[0] if user_info else "unknown"
+
+    cursor = await db.execute(
+        "SELECT mac_address FROM devices WHERE user_id = ?",
+        (user_id,)
+    )
+    devices = await cursor.fetchall()
     await db.close()
+
+    # Add devices to router whitelist (async, don't block)
+    if devices:
+        try:
+            from app.services.mikrotik_client import MikroTikClient
+            async with MikroTikClient() as client:
+                for device in devices:
+                    if device[0]:
+                        await client.add_authenticated_user(device[0], user_username)
+        except Exception as e:
+            logger.warning(f"Could not sync MAC to router: {str(e)}")
 
     return {"message": "User approved"}
 

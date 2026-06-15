@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from app.database import init_db
-from app.routers import auth, users, devices
+from app.routers import auth, users, devices, router_sync
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +48,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(devices.router, prefix="/api")
+app.include_router(router_sync.router, prefix="/api")
 
 # Health check endpoint
 @app.get("/health")

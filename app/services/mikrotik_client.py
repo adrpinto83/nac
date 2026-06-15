@@ -331,3 +331,76 @@ class MikroTikClient:
             "internet_online": internet,
             "timestamp": datetime.now().isoformat()
         }
+
+    # ============ NAC SYSTEM - AUTHORIZED USERS ============
+
+    async def add_authenticated_user(self, mac_address: str, username: str = "") -> bool:
+        """
+        Agregar MAC de usuario autenticado a lista de firewall
+        Se ejecuta cuando admin aprueba un usuario en NAC
+        """
+        comment = f"NAC: {username}" if username else "NAC: Approved"
+        return await self.add_to_address_list(
+            list_name="authenticated-users",
+            address=mac_address,
+            comment=comment
+        )
+
+    async def remove_authenticated_user(self, mac_address: str) -> bool:
+        """
+        Remover MAC de usuario de lista de firewall
+        Se ejecuta cuando un usuario es rechazado o suspendido
+        """
+        address_lists = await self.get_address_lists()
+
+        for item in address_lists:
+            if (item.get("list") == "authenticated-users" and
+                item.get("address") == mac_address):
+                item_id = item.get(".id")
+                if item_id:
+                    return await self.remove_from_address_list(item_id)
+
+        return False
+
+    async def sync_approved_users(self, approved_macs: List[str]) -> Dict[str, bool]:
+        """
+        Sincronizar todos los MACs aprobados con el router
+        Se ejecuta periódicamente o cuando hay cambios
+        """
+        current_lists = await self.get_address_lists()
+        current_macs = [
+            item.get("address") for item in current_lists
+            if item.get("list") == "authenticated-users"
+        ]
+
+        results = {
+            "added": [],
+            "removed": [],
+            "errors": []
+        }
+
+        # Agregar nuevos MACs
+        for mac in approved_macs:
+            if mac not in current_macs:
+                try:
+                    success = await self.add_authenticated_user(mac)
+                    if success:
+                        results["added"].append(mac)
+                    else:
+                        results["errors"].append(f"Failed to add {mac}")
+                except Exception as e:
+                    results["errors"].append(f"{mac}: {str(e)}")
+
+        # Remover MACs que ya no están aprobados
+        for mac in current_macs:
+            if mac not in approved_macs and mac != "0.0.0.0/0":
+                try:
+                    success = await self.remove_authenticated_user(mac)
+                    if success:
+                        results["removed"].append(mac)
+                    else:
+                        results["errors"].append(f"Failed to remove {mac}")
+                except Exception as e:
+                    results["errors"].append(f"{mac}: {str(e)}")
+
+        return results
