@@ -29,6 +29,7 @@ async def init_db():
             password_hash TEXT NOT NULL,
             role TEXT DEFAULT 'user',
             is_active BOOLEAN DEFAULT 1,
+            approval_status TEXT DEFAULT 'pending',
             last_login TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -119,10 +120,10 @@ async def init_db():
         admin_hash = hash_password("admin123")
         await conn.execute(
             """INSERT INTO users
-               (username, full_name, email, phone, department, position, company, password_hash, role, is_active)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (username, full_name, email, phone, department, position, company, password_hash, role, is_active, approval_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             ("admin", "Administrator", "admin@nac.local", "+1234567890", "IT", "System Administrator",
-             "Company", admin_hash, "admin", 1)
+             "Company", admin_hash, "admin", 1, "approved")
         )
         await conn.commit()
 

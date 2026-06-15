@@ -45,6 +45,9 @@
                 <button onclick="navigateTo('devices')" class="nav-item" data-page="devices">
                     <span class="icon">📱</span> Devices
                 </button>
+                <button id="pendingUsersNav" onclick="navigateTo('pendingUsers')" class="nav-item" data-page="pendingUsers" style="display:none;">
+                    <span class="icon">⏳</span> Pending <span id="pendingBadge" style="background:#ef4444;color:white;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:0.8rem;">0</span>
+                </button>
                 <button onclick="navigateTo('profile')" class="nav-item" data-page="profile">
                     <span class="icon">⚙️</span> Profile
                 </button>
@@ -180,6 +183,29 @@
                 <div id="profileContent" class="profile-card">
                     <p>Loading profile...</p>
                 </div>
+            </div>
+
+            <!-- Pending Users Page (Admin Only) -->
+            <div id="pendingUsersPage" class="page">
+                <div class="page-header">
+                    <h1>⏳ Pending User Approvals</h1>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Full Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Registered</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingUsersTable">
+                        <tr><td colspan="6">Loading...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </main>
     </div>

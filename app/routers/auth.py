@@ -38,7 +38,7 @@ async def login(request: LoginRequest):
     db = await get_db()
 
     cursor = await db.execute(
-        "SELECT id, username, password_hash, role, is_active FROM users WHERE username = ?",
+        "SELECT id, username, password_hash, role, is_active, approval_status FROM users WHERE username = ?",
         (request.username,)
     )
     user = await cursor.fetchone()
@@ -54,6 +54,12 @@ async def login(request: LoginRequest):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is inactive",
+        )
+
+    if user[5] != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account pending approval",
         )
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -107,3 +113,181 @@ async def get_me(authorization: Optional[str] = Header(None)):
 async def logout():
     """Logout (client removes token)."""
     return {"message": "Logged out successfully"}
+
+
+# ============== PUBLIC REGISTRATION ==============
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class PendingUserResponse(BaseModel):
+    id: int
+    username: str
+    full_name: str
+    email: Optional[str]
+    phone: Optional[str]
+    approval_status: str
+    created_at: str
+
+
+@router.post("/register", response_model=UserResponse)
+async def register(request: RegisterRequest):
+    """Register a new user (pending approval)."""
+    db = await get_db()
+
+    # Check if user exists
+    cursor = await db.execute(
+        "SELECT id FROM users WHERE username = ?",
+        (request.username,)
+    )
+    if await cursor.fetchone():
+        await db.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists"
+        )
+
+    # Create pending user
+    password_hash = hash_password(request.password)
+    await db.execute(
+        """INSERT INTO users
+           (username, full_name, email, phone, password_hash, role, is_active, approval_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (request.username, request.full_name, request.email, request.phone,
+         password_hash, "user", 0, "pending")
+    )
+    await db.commit()
+
+    cursor = await db.execute(
+        "SELECT id FROM users WHERE username = ?",
+        (request.username,)
+    )
+    user_id = (await cursor.fetchone())[0]
+    await db.close()
+
+    return UserResponse(
+        id=user_id,
+        username=request.username,
+        full_name=request.full_name,
+        email=request.email,
+        role="user",
+        is_active=False
+    )
+
+
+@router.get("/pending-users", response_model=list[PendingUserResponse])
+async def get_pending_users(authorization: Optional[str] = Header(None)):
+    """Get list of pending users (admin only)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    username = payload.get("sub")
+    db = await get_db()
+
+    cursor = await db.execute(
+        "SELECT role FROM users WHERE username = ?",
+        (username,)
+    )
+    user = await cursor.fetchone()
+
+    if not user or user[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    cursor = await db.execute(
+        "SELECT id, username, full_name, email, phone, approval_status, created_at FROM users WHERE approval_status = 'pending' ORDER BY created_at DESC"
+    )
+    pending = await cursor.fetchall()
+    await db.close()
+
+    return [
+        PendingUserResponse(
+            id=p[0],
+            username=p[1],
+            full_name=p[2],
+            email=p[3],
+            phone=p[4],
+            approval_status=p[5],
+            created_at=str(p[6])
+        ) for p in pending
+    ]
+
+
+@router.post("/approve-user/{user_id}")
+async def approve_user(user_id: int, authorization: Optional[str] = Header(None)):
+    """Approve a pending user (admin only)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    username = payload.get("sub")
+    db = await get_db()
+
+    cursor = await db.execute(
+        "SELECT role FROM users WHERE username = ?",
+        (username,)
+    )
+    user = await cursor.fetchone()
+
+    if not user or user[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    await db.execute(
+        "UPDATE users SET approval_status = 'approved', is_active = 1 WHERE id = ?",
+        (user_id,)
+    )
+    await db.commit()
+    await db.close()
+
+    return {"message": "User approved"}
+
+
+@router.post("/reject-user/{user_id}")
+async def reject_user(user_id: int, authorization: Optional[str] = Header(None)):
+    """Reject a pending user (admin only)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    username = payload.get("sub")
+    db = await get_db()
+
+    cursor = await db.execute(
+        "SELECT role FROM users WHERE username = ?",
+        (username,)
+    )
+    user = await cursor.fetchone()
+
+    if not user or user[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    await db.execute(
+        "UPDATE users SET approval_status = 'rejected' WHERE id = ?",
+        (user_id,)
+    )
+    await db.commit()
+    await db.close()
+
+    return {"message": "User rejected"}

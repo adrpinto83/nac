@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFiD1405 - User Registration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .splash-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 450px;
+            padding: 3rem 2rem;
+        }
+
+        .splash-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .splash-header h1 {
+            font-size: 2.5rem;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .splash-header p {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+
+        .splash-info {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+            color: #555;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.875rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group input::placeholder {
+            color: #999;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 0.875rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-register {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-bottom: 1rem;
+        }
+
+        .btn-register:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-register:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-login {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .btn-login:hover {
+            background: #f8f9ff;
+        }
+
+        .message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 2rem;
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.6s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 480px) {
+            .splash-container {
+                padding: 2rem 1.5rem;
+            }
+
+            .splash-header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-container">
+        <div class="splash-header">
+            <h1>📱 WiFiD1405</h1>
+            <p>Network Registration</p>
+        </div>
+
+        <div class="splash-info">
+            <strong>Welcome!</strong> Register to get internet access. Your registration will be reviewed by our network administrator.
+        </div>
+
+        <div id="message" class="message"></div>
+
+        <form id="registrationForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Create a username">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Create a password">
+            </div>
+
+            <div class="form-group">
+                <label for="fullName">Full Name</label>
+                <input type="text" id="fullName" name="fullName" required placeholder="Your full name">
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" placeholder="your.email@example.com">
+            </div>
+
+            <div class="form-group">
+                <label for="phone">Phone (Optional)</label>
+                <input type="tel" id="phone" name="phone" placeholder="+1 (555) 123-4567">
+            </div>
+
+            <button type="submit" class="btn btn-register" id="submitBtn">
+                Register Now
+            </button>
+
+            <button type="button" class="btn btn-login" onclick="navigateToLogin()">
+                Already have an account? Login
+            </button>
+        </form>
+
+        <div class="footer">
+            <p>Your data will be securely stored and protected</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+
+        document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const fullName = document.getElementById('fullName').value;
+            const email = document.getElementById('email').value;
+            const phone = document.getElementById('phone').value;
+
+            const submitBtn = document.getElementById('submitBtn');
+            const messageEl = document.getElementById('message');
+
+            // Disable button and show loading
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner"></span>Registering...';
+            messageEl.className = 'message';
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        full_name: fullName,
+                        email: email || null,
+                        phone: phone || null
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageEl.className = 'message success';
+                    messageEl.innerHTML = `
+                        <strong>✓ Registration Successful!</strong><br>
+                        Your account is pending administrator approval.<br>
+                        You'll be able to login once approved.
+                    `;
+                    document.getElementById('registrationForm').reset();
+
+                    // Redirect after 3 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                } else {
+                    messageEl.className = 'message error';
+                    messageEl.textContent = data.detail || 'Registration failed. Try again.';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Register Now';
+                }
+            } catch (error) {
+                messageEl.className = 'message error';
+                messageEl.textContent = 'Network error. Please try again.';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Register Now';
+            }
+        });
+
+        function navigateToLogin() {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>

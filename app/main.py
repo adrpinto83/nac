@@ -83,4 +83,11 @@ if STATIC_DIR.exists():
         with open(str(STATIC_DIR / "index.html"), "r") as f:
             return f.read()
 
+    # Serve splash page for public registration
+    @app.api_route("/splash", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    async def splash():
+        """Página de registro público (splash page)."""
+        with open(str(STATIC_DIR / "splash.html"), "r") as f:
+            return f.read()
+
 logger.info("🚀 Aplicación NAC iniciada correctamente")

@@ -79,6 +79,7 @@ function navigateTo(page) {
     if (page === 'users') loadUsers();
     if (page === 'devices') loadDevices();
     if (page === 'profile') loadProfile();
+    if (page === 'pendingUsers') loadPendingUsers();
 }
 
 // ============== DASHBOARD ==============
@@ -295,6 +296,13 @@ async function loadProfile() {
         const user = await fetchAPI(`${API_BASE}/auth/me`);
         if (user) {
             document.getElementById('userDisplay').textContent = user.username;
+
+            // Show pending users section only for admins
+            if (user.role === 'admin') {
+                document.getElementById('pendingUsersNav').style.display = 'block';
+                loadPendingUsersBadge();
+            }
+
             document.getElementById('profileContent').innerHTML = `
                 <h2>${user.full_name}</h2>
                 <p><strong>Username:</strong> ${user.username}</p>
@@ -308,6 +316,69 @@ async function loadProfile() {
         }
     } catch (error) {
         console.error('Profile load error:', error);
+    }
+}
+
+// ============== PENDING USERS (ADMIN) ==============
+async function loadPendingUsersBadge() {
+    try {
+        const pending = await fetchAPI(`${API_BASE}/auth/pending-users`) || [];
+        document.getElementById('pendingBadge').textContent = pending.length;
+    } catch (error) {
+        console.error('Pending users badge error:', error);
+    }
+}
+
+async function loadPendingUsers() {
+    try {
+        const pending = await fetchAPI(`${API_BASE}/auth/pending-users`) || [];
+        displayPendingUsers(pending);
+    } catch (error) {
+        console.error('Pending users load error:', error);
+    }
+}
+
+function displayPendingUsers(users) {
+    document.getElementById('pendingUsersTable').innerHTML = users.length === 0
+        ? '<tr><td colspan="6" style="text-align:center;padding:2rem;">No pending users</td></tr>'
+        : users.map(user => `
+            <tr>
+                <td><strong>${user.username}</strong></td>
+                <td>${user.full_name}</td>
+                <td>${user.email || '-'}</td>
+                <td>${user.phone || '-'}</td>
+                <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                <td>
+                    <button class="btn btn-success" style="padding:0.5rem 1rem;font-size:0.85rem;margin-right:0.5rem;" onclick="approveUser(${user.id})">✓ Approve</button>
+                    <button class="btn btn-danger" style="padding:0.5rem 1rem;font-size:0.85rem;" onclick="rejectUser(${user.id})">✗ Reject</button>
+                </td>
+            </tr>
+        `).join('');
+}
+
+async function approveUser(userId) {
+    if (!confirm('Approve this user?')) return;
+
+    try {
+        await fetchAPI(`${API_BASE}/auth/approve-user/${userId}`, { method: 'POST' });
+        loadPendingUsers();
+        loadPendingUsersBadge();
+        alert('User approved!');
+    } catch (error) {
+        alert('Error approving user');
+    }
+}
+
+async function rejectUser(userId) {
+    if (!confirm('Reject this user?')) return;
+
+    try {
+        await fetchAPI(`${API_BASE}/auth/reject-user/${userId}`, { method: 'POST' });
+        loadPendingUsers();
+        loadPendingUsersBadge();
+        alert('User rejected!');
+    } catch (error) {
+        alert('Error rejecting user');
     }
 }
 
