@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from app.database import init_db
 from app.routers import auth, users, devices
 
@@ -62,10 +62,11 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # Serve index.html
-    @app.get("/", response_class=FileResponse)
+    @app.get("/", response_class=HTMLResponse)
     async def root():
         """Página principal."""
-        return FileResponse(str(STATIC_DIR / "index.html"))
+        with open(str(STATIC_DIR / "index.html"), "r") as f:
+            return f.read()
 
 # Routers - DESPUÉS DE STATIC
 app.include_router(auth.router, prefix="/api")
