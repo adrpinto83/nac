@@ -73,14 +73,14 @@ async def status():
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
 if STATIC_DIR.exists():
-    # Serve index.html en raíz
-    @app.get("/", response_class=HTMLResponse)
+    # Mount static files first
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # Serve index.html en raíz (AFTER mounting static files)
+    @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
     async def root():
         """Página principal."""
         with open(str(STATIC_DIR / "index.html"), "r") as f:
             return f.read()
-
-    # Mount static files
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 logger.info("🚀 Aplicación NAC iniciada correctamente")
