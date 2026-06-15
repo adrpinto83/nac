@@ -1,7 +1,8 @@
 """Users management router."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Header
 from pydantic import BaseModel
+from typing import Optional
 from app.database import get_db
 from app.security import hash_password, decode_token
 
@@ -40,7 +41,7 @@ async def verify_token(authorization: str = None) -> dict:
 
 
 @router.get("/", response_model=list[UserResponse])
-async def list_users(authorization: str = None):
+async def list_users(authorization: Optional[str] = Header(None)):
     """List all users."""
     await verify_token(authorization)
 
@@ -65,7 +66,7 @@ async def list_users(authorization: str = None):
 
 
 @router.post("/", response_model=UserResponse)
-async def create_user(user: UserCreate, authorization: str = None):
+async def create_user(user: UserCreate, authorization: Optional[str] = Header(None)):
     """Create new user."""
     await verify_token(authorization)
 
@@ -96,7 +97,7 @@ async def create_user(user: UserCreate, authorization: str = None):
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, authorization: str = None):
+async def get_user(user_id: int, authorization: Optional[str] = Header(None)):
     """Get user by ID."""
     await verify_token(authorization)
 
@@ -122,7 +123,7 @@ async def get_user(user_id: int, authorization: str = None):
 
 
 @router.delete("/{user_id}")
-async def delete_user(user_id: int, authorization: str = None):
+async def delete_user(user_id: int, authorization: Optional[str] = Header(None)):
     """Delete user."""
     await verify_token(authorization)
 

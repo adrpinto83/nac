@@ -1,7 +1,8 @@
 """Devices management router."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Header
 from pydantic import BaseModel
+from typing import Optional
 from app.database import get_db
 from app.security import decode_token
 
@@ -38,7 +39,7 @@ async def verify_token(authorization: str = None) -> dict:
 
 
 @router.get("/", response_model=list[DeviceResponse])
-async def list_devices(authorization: str = None):
+async def list_devices(authorization: Optional[str] = Header(None)):
     """List all devices."""
     await verify_token(authorization)
 
@@ -63,7 +64,7 @@ async def list_devices(authorization: str = None):
 
 
 @router.post("/", response_model=DeviceResponse)
-async def register_device(device: DeviceCreate, authorization: str = None):
+async def register_device(device: DeviceCreate, authorization: Optional[str] = Header(None)):
     """Register new device."""
     await verify_token(authorization)
 
@@ -93,7 +94,7 @@ async def register_device(device: DeviceCreate, authorization: str = None):
 
 
 @router.get("/live", response_model=list[DeviceResponse])
-async def get_live_devices(authorization: str = None):
+async def get_live_devices(authorization: Optional[str] = Header(None)):
     """Get live devices from router."""
     await verify_token(authorization)
 
@@ -118,7 +119,7 @@ async def get_live_devices(authorization: str = None):
 
 
 @router.delete("/{device_id}")
-async def delete_device(device_id: int, authorization: str = None):
+async def delete_device(device_id: int, authorization: Optional[str] = Header(None)):
     """Delete device."""
     await verify_token(authorization)
 

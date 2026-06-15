@@ -1,8 +1,9 @@
 """Authentication router."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Header
 from datetime import timedelta
 from pydantic import BaseModel
+from typing import Optional
 from app.database import get_db
 from app.security import (
     create_access_token, verify_password, decode_token,
@@ -68,7 +69,7 @@ async def login(request: LoginRequest):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(authorization: str = None):
+async def get_me(authorization: Optional[str] = Header(None)):
     """Get current user info."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
