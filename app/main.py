@@ -3,16 +3,35 @@
 import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.base import BaseHTTPMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from app.database import init_db
 from app.routers import auth, users, devices, router_sync
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Splash page URL
+SPLASH_PAGE_URL = "https://nac-production.up.railway.app/splash"
+
+class CaptivePortalMiddleware(BaseHTTPMiddleware):
+    """Middleware para detectar y redirigir clientes de captive portal"""
+    async def dispatch(self, request: Request, call_next):
+        # Si es una solicitud a una ruta conocida, dejar pasar
+        safe_paths = ["/api", "/health", "/docs", "/redoc", "/openapi.json", "/static"]
+
+        # Si NO es una ruta API/admin, probablemente sea un cliente captive portal
+        if not any(request.url.path.startswith(path) for path in safe_paths):
+            if request.url.path != "/" and request.url.path != "/splash":
+                logger.info(f"Captive Portal Redirect: {request.client.host} → {request.url.path}")
+                return RedirectResponse(url=SPLASH_PAGE_URL, status_code=302)
+
+        response = await call_next(request)
+        return response
 
 
 @asynccontextmanager
@@ -34,6 +53,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Captive Portal Middleware
+app.add_middleware(CaptivePortalMiddleware)
 
 # CORS
 app.add_middleware(
