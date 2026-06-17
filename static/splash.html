@@ -840,8 +840,19 @@
                 }, 1000);
             } else {
                 msg.className = 'msg err';
+                // Dispositivo o usuario ya registrado → mostrar pantalla de estado
+                if (data.detail && data.detail.startsWith('ALREADY_REGISTERED:')) {
+                    const regStatus = data.detail.split(':')[1];
+                    const screenMap = {
+                        pending:  'screenPending',
+                        approved: 'screenApproved',
+                        rejected: 'screenRejected'
+                    };
+                    showScreen(screenMap[regStatus] || 'screenPending');
+                    return;
+                }
+
                 const errMap = {
-                    'Username already exists': 'Ese nombre de usuario ya existe.',
                     'MAC_RANDOMIZED': 'Tu dispositivo usa MAC aleatoria. Desactívala y vuelve a conectarte al WiFi.'
                 };
                 msg.textContent = errMap[data.detail] || data.detail || 'Error al registrar. Intenta de nuevo.';

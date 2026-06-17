@@ -187,16 +187,51 @@ async def register(request: RegisterRequest):
             detail="MAC_RANDOMIZED"
         )
 
-    # Check if user exists
+    # Si la MAC ya está registrada en un dispositivo, devolver estado del usuario
+    if request.mac_address:
+        cursor = await db.execute(
+            """SELECT u.approval_status FROM devices d
+               JOIN users u ON u.id = d.user_id
+               WHERE d.mac_address = ? LIMIT 1""",
+            (request.mac_address,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            await db.close()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"ALREADY_REGISTERED:{row[0]}"
+            )
+
+    # Si el username ya existe, devolver estado (no un error genérico)
     cursor = await db.execute(
-        "SELECT id FROM users WHERE username = ?",
+        "SELECT id, approval_status FROM users WHERE username = ?",
         (request.username,)
     )
-    if await cursor.fetchone():
+    existing = await cursor.fetchone()
+    if existing:
+        existing_status = existing[1]
+        # Vincular MAC a este usuario si no tenía dispositivo registrado
+        if request.mac_address:
+            import json
+            dev = {}
+            try:
+                dev = json.loads(request.device_info or '{}')
+            except Exception:
+                pass
+            await db.execute(
+                """INSERT OR IGNORE INTO devices
+                   (user_id, mac_address, ip_address, hostname, device_type, os_type, os_version, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (existing[0], request.mac_address, request.ip_address,
+                 request.full_name, dev.get('type', 'unknown'),
+                 dev.get('os', ''), dev.get('os_version', ''), request.device_info)
+            )
+            await db.commit()
         await db.close()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already exists"
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"ALREADY_REGISTERED:{existing_status}"
         )
 
     # Create pending user
