@@ -125,6 +125,8 @@ class RegisterRequest(BaseModel):
     full_name: str
     email: Optional[str] = None
     phone: Optional[str] = None
+    mac_address: Optional[str] = None
+    ip_address: Optional[str] = None
     device_info: Optional[str] = None
 
 
@@ -171,6 +173,28 @@ async def register(request: RegisterRequest):
         (request.username,)
     )
     user_id = (await cursor.fetchone())[0]
+
+    # Auto-registrar dispositivo si viene MAC del router
+    if request.mac_address:
+        import json
+        dev = {}
+        try:
+            dev = json.loads(request.device_info or '{}')
+        except Exception:
+            pass
+        await db.execute(
+            """INSERT OR IGNORE INTO devices
+               (user_id, mac_address, ip_address, hostname, device_type, os_type, os_version, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, request.mac_address, request.ip_address,
+             request.full_name,
+             dev.get('type', 'unknown'),
+             dev.get('os', ''),
+             dev.get('os_version', ''),
+             request.device_info)
+        )
+        await db.commit()
+
     await db.close()
 
     return UserResponse(
