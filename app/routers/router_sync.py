@@ -1,11 +1,17 @@
-"""Router synchronization endpoints - Sync approved users with MikroTik firewall."""
+"""Router synchronization endpoints - Sync approved users with MikroTik hotspot."""
 
-from fastapi import APIRouter, HTTPException, status, Header
+import os
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, status, Header, Query
+from fastapi.responses import PlainTextResponse
 from typing import Optional, List
 from pydantic import BaseModel
 from app.database import get_db
 from app.security import decode_token
 from app.services.mikrotik_client import MikroTikClient
+
+# Clave compartida entre Railway y el router (configura NAC_SYNC_KEY en Railway env vars)
+SYNC_KEY = os.environ.get("NAC_SYNC_KEY", "nac-sync-2024")
 
 router = APIRouter(prefix="/router", tags=["router"])
 
@@ -247,3 +253,65 @@ async def get_authenticated_users(authorization: Optional[str] = Header(None)):
             status_code=500,
             detail=f"Router error: {str(e)}"
         )
+
+
+# ─── ENDPOINT PÚBLICO: el router lo jala cada 60 s ───────────────────────────
+
+@router.get("/pull-script", response_class=PlainTextResponse)
+async def pull_script(key: str = Query(default="")):
+    """
+    El router MikroTik llama a este endpoint y recibe un script .rsc listo
+    para importar. Configura ip-binding type=bypassed para cada MAC aprobada.
+    Protegido con NAC_SYNC_KEY.
+    """
+    if key != SYNC_KEY:
+        raise HTTPException(status_code=403, detail="Invalid key")
+
+    now = datetime.utcnow().isoformat()
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT d.mac_address, u.username
+           FROM devices d
+           JOIN users u ON d.user_id = u.id
+           WHERE u.approval_status = 'approved'
+             AND u.is_active = 1
+             AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
+        (now,)
+    )
+    rows = await cursor.fetchall()
+    await db.close()
+
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        f"# NAC Sync  {ts} UTC  ({len(rows)} dispositivos aprobados)",
+        "/ip hotspot ip-binding remove [find comment~\"NAC:\"]",
+    ]
+    for mac, username in rows:
+        if mac:
+            safe = (username or "user").replace('"', '')
+            lines.append(
+                f'/ip hotspot ip-binding add mac-address="{mac}" '
+                f'type=bypassed comment="NAC:{safe}"'
+            )
+
+    return "\n".join(lines) + "\n"
+
+
+@router.get("/approved-macs", response_class=PlainTextResponse)
+async def approved_macs_list(key: str = Query(default="")):
+    """Lista plana de MACs aprobadas — una por línea. Para depurar."""
+    if key != SYNC_KEY:
+        raise HTTPException(status_code=403, detail="Invalid key")
+
+    now = datetime.utcnow().isoformat()
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT d.mac_address FROM devices d
+           JOIN users u ON d.user_id = u.id
+           WHERE u.approval_status = 'approved' AND u.is_active = 1
+             AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
+        (now,)
+    )
+    rows = await cursor.fetchall()
+    await db.close()
+    return "\n".join(r[0] for r in rows if r[0]) + "\n"
