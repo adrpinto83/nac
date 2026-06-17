@@ -22,6 +22,10 @@ class DeviceInfo(BaseModel):
     last_seen: Optional[str]
 
 
+class RoleUpdateRequest(BaseModel):
+    role: str  # 'user' | 'admin'
+
+
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -55,6 +59,7 @@ class UserResponse(BaseModel):
     company: Optional[str]
     role: str
     is_active: bool
+    approval_status: Optional[str] = None
     created_at: Optional[str]
 
 
@@ -85,7 +90,8 @@ async def list_users(authorization: Optional[str] = Header(None)):
 
     db = await get_db()
     cursor = await db.execute(
-        """SELECT id, username, full_name, email, phone, department, position, company, role, is_active, created_at
+        """SELECT id, username, full_name, email, phone, department, position, company,
+                  role, is_active, approval_status, created_at
            FROM users ORDER BY created_at DESC"""
     )
     users = await cursor.fetchall()
@@ -93,17 +99,9 @@ async def list_users(authorization: Optional[str] = Header(None)):
 
     return [
         UserResponse(
-            id=u[0],
-            username=u[1],
-            full_name=u[2],
-            email=u[3],
-            phone=u[4],
-            department=u[5],
-            position=u[6],
-            company=u[7],
-            role=u[8],
-            is_active=bool(u[9]),
-            created_at=u[10]
+            id=u[0], username=u[1], full_name=u[2], email=u[3],
+            phone=u[4], department=u[5], position=u[6], company=u[7],
+            role=u[8], is_active=bool(u[9]), approval_status=u[10], created_at=u[11]
         )
         for u in users
     ]
@@ -291,6 +289,42 @@ async def delete_user(user_id: int, authorization: Optional[str] = Header(None))
     await db.close()
 
     return {"message": "User deleted successfully"}
+
+
+@router.put("/{user_id}/role")
+async def update_user_role(user_id: int, body: RoleUpdateRequest, authorization: Optional[str] = Header(None)):
+    """Cambiar rol de un usuario. Solo el administrador principal (username='admin') puede hacerlo."""
+    payload = await verify_token(authorization)
+    caller_username = payload.get("sub")
+
+    if body.role not in ("user", "admin"):
+        raise HTTPException(status_code=400, detail="Rol inválido. Usa 'user' o 'admin'.")
+
+    db = await get_db()
+    # Verificar que el que llama es el superadmin
+    cursor = await db.execute("SELECT username, role FROM users WHERE username = ?", (caller_username,))
+    caller = await cursor.fetchone()
+    if not caller or caller[0] != "admin" or caller[1] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Solo el administrador principal puede cambiar roles.")
+
+    # No permitir cambiar el propio rol del superadmin
+    cursor = await db.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+    target = await cursor.fetchone()
+    if not target:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    if target[0] == "admin":
+        await db.close()
+        raise HTTPException(status_code=400, detail="No se puede cambiar el rol del administrador principal.")
+
+    await db.execute(
+        "UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (body.role, user_id)
+    )
+    await db.commit()
+    await db.close()
+    return {"message": "Rol actualizado", "role": body.role}
 
 
 @router.get("/{user_id}/devices", response_model=List[DeviceInfo])

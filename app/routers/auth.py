@@ -30,9 +30,20 @@ class UserResponse(BaseModel):
     id: int
     username: str
     full_name: str
-    email: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
     role: str
     is_active: bool
+    approval_status: Optional[str] = None
+    access_expires_at: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 @router.post("/login", response_model=Token)
@@ -93,7 +104,9 @@ async def get_me(authorization: Optional[str] = Header(None)):
     db = await get_db()
 
     cursor = await db.execute(
-        "SELECT id, username, full_name, email, role, is_active FROM users WHERE username = ?",
+        """SELECT id, username, full_name, email, phone, department, position,
+                  role, is_active, approval_status, access_expires_at, created_at
+           FROM users WHERE username = ?""",
         (username,)
     )
     user = await cursor.fetchone()
@@ -103,12 +116,11 @@ async def get_me(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=404, detail="User not found")
 
     return UserResponse(
-        id=user[0],
-        username=user[1],
-        full_name=user[2],
-        email=user[3],
-        role=user[4],
-        is_active=bool(user[5])
+        id=user[0], username=user[1], full_name=user[2],
+        email=user[3], phone=user[4], department=user[5], position=user[6],
+        role=user[7], is_active=bool(user[8]),
+        approval_status=user[9], access_expires_at=str(user[10]) if user[10] else None,
+        created_at=str(user[11]) if user[11] else None
     )
 
 
@@ -116,6 +128,73 @@ async def get_me(authorization: Optional[str] = Header(None)):
 async def logout():
     """Logout (client removes token)."""
     return {"message": "Logged out successfully"}
+
+
+@router.post("/change-password")
+async def change_password(request: ChangePasswordRequest, authorization: Optional[str] = Header(None)):
+    """Cambiar contraseña del usuario autenticado."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if len(request.new_password) < 6:
+        raise HTTPException(status_code=400, detail="PASSWORD_TOO_SHORT")
+
+    username = payload.get("sub")
+    db = await get_db()
+    cursor = await db.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,))
+    user = await cursor.fetchone()
+    if not user:
+        await db.close()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_password(request.current_password, user[1]):
+        await db.close()
+        raise HTTPException(status_code=400, detail="WRONG_PASSWORD")
+
+    new_hash = hash_password(request.new_password)
+    await db.execute(
+        "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (new_hash, user[0])
+    )
+    await db.commit()
+    await db.close()
+    return {"message": "Contraseña actualizada"}
+
+
+@router.get("/my-devices")
+async def my_devices(authorization: Optional[str] = Header(None)):
+    """Dispositivos del usuario autenticado."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = authorization.split(" ")[1]
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    username = payload.get("sub")
+    db = await get_db()
+    cursor = await db.execute("SELECT id FROM users WHERE username = ?", (username,))
+    row = await cursor.fetchone()
+    if not row:
+        await db.close()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cursor = await db.execute(
+        """SELECT mac_address, ip_address, device_type, os_type, os_version, created_at
+           FROM devices WHERE user_id = ? ORDER BY created_at DESC""",
+        (row[0],)
+    )
+    devices = await cursor.fetchall()
+    await db.close()
+    return [
+        {"mac_address": d[0], "ip_address": d[1], "device_type": d[2],
+         "os_type": d[3], "os_version": d[4], "registered_at": d[5]}
+        for d in devices
+    ]
 
 
 # ============== PUBLIC REGISTRATION ==============

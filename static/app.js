@@ -39,9 +39,9 @@ async function handleLogin(e) {
             initApp();
         } else {
             const map = {
-                'Invalid credentials':          'Usuario o contraseña incorrectos.',
-                'User is inactive':             'Esta cuenta está inactiva.',
-                'User account pending approval':'Tu cuenta está pendiente de aprobación.'
+                'Invalid credentials':           'Usuario o contraseña incorrectos.',
+                'User is inactive':              'Esta cuenta está inactiva.',
+                'User account pending approval': 'Tu cuenta está pendiente de aprobación de un administrador.'
             };
             err.textContent = map[data.detail] || data.detail || 'Error al iniciar sesión.';
             err.classList.add('show');
@@ -77,7 +77,8 @@ function showApp() {
 function navigateTo(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById(page + 'Page').classList.add('active');
+    const pageEl = document.getElementById(page + 'Page');
+    if (pageEl) pageEl.classList.add('active');
     const navEl = document.querySelector(`[data-page="${page}"]`);
     if (navEl) navEl.classList.add('active');
 
@@ -86,6 +87,7 @@ function navigateTo(page) {
     if (page === 'users')        loadUsers();
     if (page === 'devices')      loadDevices();
     if (page === 'profile')      loadProfile();
+    if (page === 'myAccess')     loadMyAccess();
 }
 
 function toast(msg, type = 'ok') {
@@ -93,7 +95,7 @@ function toast(msg, type = 'ok') {
     el.textContent = msg;
     el.className = 'show ' + type;
     clearTimeout(el._t);
-    el._t = setTimeout(() => { el.className = ''; }, 3000);
+    el._t = setTimeout(() => { el.className = ''; }, 3200);
 }
 
 function fmtDate(dt) {
@@ -112,10 +114,10 @@ function durationLabel(hours) {
     if (hours === 24) return '1 día';
     if (hours === 48) return '2 días';
     if (hours === 168) return '1 semana';
-    return hours + ' horas';
+    return hours + ' h';
 }
 
-// ── Init (load profile + badges) ──
+// ── Init (load profile + role-based nav) ──
 async function initApp() {
     try {
         currentUser = await fetchAPI(`${API}/auth/me`);
@@ -123,11 +125,22 @@ async function initApp() {
 
         document.getElementById('sidebarUser').textContent = currentUser.username;
 
-        if (currentUser.role === 'admin') {
-            document.getElementById('navPending').style.display = 'flex';
+        const isAdmin = currentUser.role === 'admin';
+
+        // Mostrar/ocultar nav según rol
+        document.querySelectorAll('.admin-nav').forEach(el => {
+            el.style.display = isAdmin ? '' : 'none';
+        });
+        document.querySelectorAll('.user-nav').forEach(el => {
+            el.style.display = isAdmin ? 'none' : 'flex';
+        });
+
+        if (isAdmin) {
             refreshPendingBadge();
+            navigateTo('dashboard');
+        } else {
+            navigateTo('myAccess');
         }
-        loadDashboard();
     } catch {
         handleLogout();
     }
@@ -142,7 +155,7 @@ async function refreshPendingBadge() {
     } catch { /* silent */ }
 }
 
-// ── Dashboard ──
+// ── Dashboard (admin) ──
 async function loadDashboard() {
     try {
         const [users, devices] = await Promise.all([
@@ -150,32 +163,141 @@ async function loadDashboard() {
             fetchAPI(`${API}/devices/`).catch(() => [])
         ]);
 
-        const total    = (users || []).length;
-        const pending  = (users || []).filter(u => u.approval_status === 'pending').length;
-        const approved = (users || []).filter(u => u.approval_status === 'approved').length;
+        const uList = users || [];
+        const dList = devices || [];
+        document.getElementById('statTotal').textContent    = uList.length;
+        document.getElementById('statPending').textContent  = uList.filter(u => u.approval_status === 'pending').length;
+        document.getElementById('statApproved').textContent = uList.filter(u => u.approval_status === 'approved').length;
+        document.getElementById('statDevices').textContent  = dList.length;
 
-        document.getElementById('statTotal').textContent   = total;
-        document.getElementById('statPending').textContent  = pending;
-        document.getElementById('statApproved').textContent = approved;
-        document.getElementById('statDevices').textContent  = (devices || []).length;
-
-        const recent = (users || []).slice(0, 6);
-        document.getElementById('recentUsersTable').innerHTML = recent.length === 0
-            ? '<tr class="empty-row"><td colspan="5">Sin usuarios</td></tr>'
-            : recent.map(u => `
-                <tr>
-                    <td><strong>${u.username}</strong></td>
-                    <td>${u.full_name}</td>
-                    <td>${u.department || '—'}</td>
-                    <td>${statusBadge(u.approval_status)}</td>
-                    <td>${fmtDate(u.created_at)}</td>
-                </tr>`).join('');
-    } catch (e) {
-        console.error('Dashboard error', e);
-    }
+        document.getElementById('recentUsersTable').innerHTML = uList.slice(0, 6).map(u => `
+            <tr>
+                <td><strong>${escHtml(u.username)}</strong></td>
+                <td>${escHtml(u.full_name)}</td>
+                <td>${u.department || '—'}</td>
+                <td>${statusBadge(u.approval_status)}</td>
+                <td>${fmtDate(u.created_at)}</td>
+            </tr>`).join('') || '<tr class="empty-row"><td colspan="5">Sin usuarios</td></tr>';
+    } catch (e) { console.error(e); }
 }
 
 function refreshDashboard() { loadDashboard(); }
+
+// ── Mi Acceso (usuario regular) ──
+async function loadMyAccess() {
+    const container = document.getElementById('myAccessContent');
+    container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted)">Cargando…</div>';
+
+    try {
+        const [me, devices] = await Promise.all([
+            fetchAPI(`${API}/auth/me`),
+            fetchAPI(`${API}/auth/my-devices`).catch(() => [])
+        ]);
+
+        const status = me.approval_status || 'pending';
+        const expires = me.access_expires_at;
+        const now = new Date();
+        const expDate = expires ? new Date(expires) : null;
+        const isExpired = expDate && expDate < now;
+
+        // Banner de estado
+        const bannerCfg = {
+            approved: { cls: 'approved', icon: '✅', title: '¡Acceso aprobado!',
+                sub: 'Tu cuenta está activa y tienes acceso a la red WiFi.' },
+            pending:  { cls: 'pending',  icon: '⏳', title: 'Solicitud en revisión',
+                sub: 'Un administrador revisará tu solicitud pronto. Recibirás acceso cuando sea aprobada.' },
+            rejected: { cls: 'rejected', icon: '🚫', title: 'Solicitud rechazada',
+                sub: 'Tu solicitud no fue aprobada. Contacta al administrador para más información.' },
+        };
+        const cfg = bannerCfg[status] || bannerCfg.pending;
+
+        let expiryHtml = '';
+        if (status === 'approved' && expires) {
+            if (isExpired) {
+                expiryHtml = `<div class="access-expiry" style="background:rgba(220,38,38,.1);color:#991b1b">
+                    ⚠️ Acceso expirado el ${fmtDateTime(expires)}
+                </div>`;
+            } else {
+                expiryHtml = `<div class="access-expiry">
+                    🕐 Válido hasta: ${fmtDateTime(expires)}
+                </div>`;
+            }
+        } else if (status === 'approved' && !expires) {
+            expiryHtml = `<div class="access-expiry">♾️ Acceso permanente</div>`;
+        }
+
+        // Info personal
+        const infoRows = [
+            ['Nombre',      me.full_name],
+            ['Usuario',     me.username],
+            ['Departamento',me.department || '—'],
+            ['Cargo',       me.position   || '—'],
+            ['Correo',      me.email      || '—'],
+            ['Teléfono',    me.phone      || '—'],
+            ['Registrado',  fmtDate(me.created_at)],
+        ].filter(([, v]) => v && v !== '—').map(([l, v]) => `
+            <div class="profile-field">
+                <span class="profile-field-label">${l}</span>
+                <span class="profile-field-val">${escHtml(String(v))}</span>
+            </div>`).join('');
+
+        // Dispositivos
+        const devHtml = (devices || []).length === 0
+            ? '<p style="color:var(--text-muted);font-size:.875rem">No hay dispositivos registrados.</p>'
+            : `<div class="device-cards">${(devices || []).map(d => deviceCardHtml(d)).join('')}</div>`;
+
+        container.innerHTML = `
+            <div class="access-banner ${cfg.cls}">
+                <div class="access-banner-icon">${cfg.icon}</div>
+                <div>
+                    <div class="access-banner-title">${cfg.title}</div>
+                    <div class="access-banner-sub">${cfg.sub}</div>
+                    ${expiryHtml}
+                </div>
+            </div>
+
+            <div style="display:grid;gap:1.25rem;grid-template-columns:1fr 1fr;align-items:start">
+                <div class="section-card">
+                    <div class="section-card-header">👤 Mis datos</div>
+                    <div style="padding:1.1rem 1.5rem">
+                        <div class="profile-fields">${infoRows}</div>
+                    </div>
+                </div>
+                <div class="section-card">
+                    <div class="section-card-header">📱 Mis dispositivos</div>
+                    <div style="padding:1.1rem 1.5rem">${devHtml}</div>
+                </div>
+            </div>`;
+    } catch (e) {
+        container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--danger)">Error al cargar.</div>';
+    }
+}
+
+function deviceCardHtml(d) {
+    const iconMap = { smartphone: '📱', tablet: '📟', laptop: '💻', desktop: '🖥️' };
+    const icon = iconMap[(d.device_type || '').toLowerCase()] || '💻';
+    return `<div class="device-card">
+        <div class="device-card-header">
+            <div class="device-card-icon">${icon}</div>
+            <div>
+                <div class="device-card-type">${d.device_type || 'Dispositivo'}</div>
+                <div class="device-card-os">${[d.os_type, d.os_version].filter(Boolean).join(' ') || '—'}</div>
+            </div>
+        </div>
+        ${d.mac_address ? `<div class="device-card-field">
+            <span class="device-card-label">Dirección MAC</span>
+            <span class="device-card-val">${d.mac_address}</span>
+        </div>` : ''}
+        ${d.ip_address ? `<div class="device-card-field">
+            <span class="device-card-label">Dirección IP</span>
+            <span class="device-card-val">${d.ip_address}</span>
+        </div>` : ''}
+        <div class="device-card-field">
+            <span class="device-card-label">Registrado</span>
+            <span class="device-card-val" style="font-family:inherit;font-size:.8rem">${fmtDate(d.registered_at)}</span>
+        </div>
+    </div>`;
+}
 
 // ── Pending users (cards) ──
 async function loadPendingUsers() {
@@ -184,24 +306,18 @@ async function loadPendingUsers() {
 
     try {
         const list = await fetchAPI(`${API}/auth/pending-users`) || [];
-
         if (list.length === 0) {
-            container.innerHTML = `
-                <div style="padding:3rem;text-align:center;color:var(--text-muted)">
-                    <div style="font-size:2.5rem;margin-bottom:.75rem">🎉</div>
-                    <strong>Sin solicitudes pendientes</strong>
-                    <p style="margin-top:.35rem;font-size:.875rem">Todas las solicitudes han sido procesadas.</p>
-                </div>`;
+            container.innerHTML = `<div style="padding:3rem;text-align:center;color:var(--text-muted)">
+                <div style="font-size:2.5rem;margin-bottom:.75rem">🎉</div>
+                <strong>Sin solicitudes pendientes</strong>
+                <p style="margin-top:.35rem;font-size:.875rem">Todas las solicitudes han sido procesadas.</p>
+            </div>`;
             refreshPendingBadge();
             return;
         }
-
-        container.innerHTML = '<div class="cards-grid">' +
-            list.map(u => buildPendingCard(u)).join('') +
-        '</div>';
-
+        container.innerHTML = '<div class="cards-grid">' + list.map(buildPendingCard).join('') + '</div>';
         refreshPendingBadge();
-    } catch (e) {
+    } catch {
         container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--danger)">Error al cargar solicitudes.</div>';
     }
 }
@@ -210,18 +326,16 @@ function buildPendingCard(u) {
     const isVisitor  = u.department === 'Visita / Externo';
     const ticketHtml = (isVisitor && u.ticket_number) ? `
         <div class="card-ticket">
-            🎫 Ticket: <strong>${u.ticket_number}</strong>
+            🎫 Ticket: <strong>${escHtml(u.ticket_number)}</strong>
             ${u.access_duration_hours ? `· ${durationLabel(u.access_duration_hours)}` : ''}
         </div>` : '';
 
     const deviceHtml = (u.mac_address || u.ip_address || u.device_type) ? `
         <div class="card-device">
-            ${u.device_type ? `<div class="card-device-row">💻 <span>${u.device_type}${u.os_type ? ' · ' + u.os_type : ''}${u.os_version ? ' ' + u.os_version : ''}</span></div>` : ''}
-            ${u.mac_address ? `<div class="card-device-row">🔑 <span class="mono" style="font-family:monospace;font-size:.79rem">${u.mac_address}</span></div>` : ''}
-            ${u.ip_address  ? `<div class="card-device-row">📍 <span>${u.ip_address}</span></div>` : ''}
+            ${u.device_type ? `<div class="card-device-row">💻 <span>${escHtml(u.device_type)}${u.os_type ? ' · ' + escHtml(u.os_type) : ''}${u.os_version ? ' ' + escHtml(u.os_version) : ''}</span></div>` : ''}
+            ${u.mac_address ? `<div class="card-device-row">🔑 <span style="font-family:monospace;font-size:.79rem">${escHtml(u.mac_address)}</span></div>` : ''}
+            ${u.ip_address  ? `<div class="card-device-row">📍 <span>${escHtml(u.ip_address)}</span></div>` : ''}
         </div>` : '';
-
-    const durationDefault = u.access_duration_hours || '';
 
     return `
     <div class="pending-card" id="card-${u.id}">
@@ -249,11 +363,11 @@ function buildPendingCard(u) {
             </div>
             ${ticketHtml}
             ${deviceHtml}
-            <div class="card-date">📅 Registrado: ${fmtDateTime(u.created_at)}</div>
+            <div class="card-date">📅 ${fmtDateTime(u.created_at)}</div>
         </div>
         <div class="card-footer">
             <button class="btn btn-danger btn-sm" onclick="rejectUser(${u.id})">✕ Rechazar</button>
-            <button class="btn btn-success btn-sm" onclick="openApproveModal(${u.id}, '${escAttr(u.full_name)}', '${escAttr(u.department || '')}', '${escAttr(u.position || '')}', ${durationDefault || 'null'})">
+            <button class="btn btn-success btn-sm" onclick="openApproveModal(${u.id},'${escAttr(u.full_name)}','${escAttr(u.department||'')}','${escAttr(u.position||'')}',${u.access_duration_hours||'null'})">
                 ✓ Aprobar
             </button>
         </div>
@@ -266,17 +380,11 @@ function openApproveModal(id, name, dept, position, requestedHours) {
     document.getElementById('approveUserName').textContent = name;
     document.getElementById('approveUserMeta').textContent =
         [dept, position].filter(Boolean).join(' · ') || 'Sin información adicional';
-
     const sel = document.getElementById('approveHours');
     sel.value = requestedHours || '';
-
-    const hint = document.getElementById('approveHint');
-    if (requestedHours) {
-        hint.textContent = `El usuario solicitó ${durationLabel(requestedHours)}. Puedes modificarlo si lo deseas.`;
-    } else {
-        hint.textContent = 'Dejar en blanco para acceso permanente.';
-    }
-
+    document.getElementById('approveHint').textContent = requestedHours
+        ? `El usuario solicitó ${durationLabel(requestedHours)}. Puedes modificarlo si lo deseas.`
+        : 'Dejar en blanco para acceso permanente.';
     document.getElementById('approveModal').classList.add('show');
 }
 
@@ -290,19 +398,14 @@ async function confirmApprove() {
     const btn = document.getElementById('approveConfirmBtn');
     const hours = document.getElementById('approveHours').value;
     const body = hours ? { access_hours: parseInt(hours, 10) } : {};
-
     btn.disabled = true;
     btn.innerHTML = '<span class="spin"></span> Aprobando…';
-
     try {
-        await fetchAPI(`${API}/auth/approve-user/${pendingApproveId}`, {
-            method: 'POST',
-            body: JSON.stringify(body)
-        });
+        await fetchAPI(`${API}/auth/approve-user/${pendingApproveId}`, { method: 'POST', body: JSON.stringify(body) });
         closeApproveModal();
         toast('✅ Usuario aprobado correctamente.', 'ok');
         loadPendingUsers();
-    } catch (e) {
+    } catch {
         toast('❌ Error al aprobar. Intenta de nuevo.', 'err');
     } finally {
         btn.disabled = false;
@@ -321,7 +424,7 @@ async function rejectUser(userId) {
     }
 }
 
-// ── Users table ──
+// ── Users table (admin) ──
 async function loadUsers() {
     try {
         allUsers = await fetchAPI(`${API}/users/`) || [];
@@ -330,8 +433,9 @@ async function loadUsers() {
 }
 
 function renderUsers(list) {
+    const isSuperadmin = currentUser?.username === 'admin';
     document.getElementById('usersTable').innerHTML = list.length === 0
-        ? '<tr class="empty-row"><td colspan="7">Sin usuarios</td></tr>'
+        ? '<tr class="empty-row"><td colspan="8">Sin usuarios</td></tr>'
         : list.map(u => `
             <tr>
                 <td><strong>${escHtml(u.username)}</strong></td>
@@ -339,13 +443,38 @@ function renderUsers(list) {
                 <td>${u.department || '—'}</td>
                 <td>${u.position || '—'}</td>
                 <td>${u.email || '—'}</td>
-                <td>${statusBadge(u.approval_status)}</td>
+                <td>${statusBadge(u.approval_status || '')}</td>
+                <td>${roleCell(u, isSuperadmin)}</td>
                 <td>
-                    ${u.approval_status === 'pending' && currentUser?.role === 'admin'
+                    ${u.approval_status === 'pending'
                         ? `<button class="btn btn-success btn-sm" onclick="openApproveModal(${u.id},'${escAttr(u.full_name)}','${escAttr(u.department||'')}','${escAttr(u.position||'')}',${u.access_duration_hours||'null'})">Aprobar</button>`
-                        : ''}
+                        : '—'}
                 </td>
             </tr>`).join('');
+}
+
+function roleCell(u, isSuperadmin) {
+    if (!isSuperadmin || u.username === 'admin') {
+        return roleBadge(u.role);
+    }
+    return `<select class="role-select" onchange="updateUserRole(${u.id}, this.value)">
+        <option value="user"  ${u.role === 'user'  ? 'selected' : ''}>Usuario</option>
+        <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+    </select>`;
+}
+
+async function updateUserRole(userId, newRole) {
+    try {
+        await fetchAPI(`${API}/users/${userId}/role`, {
+            method: 'PUT',
+            body: JSON.stringify({ role: newRole })
+        });
+        toast(`✅ Rol actualizado a "${newRole === 'admin' ? 'Admin' : 'Usuario'}".`, 'ok');
+        loadUsers();
+    } catch (e) {
+        toast('❌ Error al cambiar rol.', 'err');
+        loadUsers(); // restore select state
+    }
 }
 
 function filterUsers() {
@@ -398,20 +527,87 @@ async function loadProfile() {
         const initials = u.full_name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
         document.getElementById('profileAvatar').textContent = initials;
         document.getElementById('profileName').textContent = u.full_name;
-        document.getElementById('profileRole').innerHTML = u.role === 'admin'
-            ? '<span class="badge badge-admin">Administrador</span>'
-            : '<span class="badge badge-user">Usuario</span>';
-        document.getElementById('profileFields').innerHTML = [
-            ['Usuario',        u.username],
-            ['Correo',         u.email || '—'],
-            ['Rol',            u.role === 'admin' ? 'Administrador' : 'Usuario'],
-            ['Estado',         u.is_active ? 'Activo' : 'Inactivo'],
-        ].map(([label, val]) => `
+        document.getElementById('profileRole').innerHTML = roleBadge(u.role);
+
+        const fields = [
+            ['Usuario',      u.username],
+            ['Correo',       u.email      || '—'],
+            ['Teléfono',     u.phone      || '—'],
+            ['Departamento', u.department || '—'],
+            ['Cargo',        u.position   || '—'],
+            ['Rol',          u.role === 'admin' ? 'Administrador' : 'Usuario'],
+            ['Estado',       u.approval_status === 'approved' ? 'Aprobado' :
+                             u.approval_status === 'pending'  ? 'Pendiente' : 'Rechazado'],
+            ['Registrado',   fmtDate(u.created_at)],
+        ];
+
+        document.getElementById('profileFields').innerHTML = fields.map(([label, val]) => `
             <div class="profile-field">
                 <span class="profile-field-label">${label}</span>
                 <span class="profile-field-val">${escHtml(String(val))}</span>
             </div>`).join('');
+
+        // Reset change-password form
+        ['pwCurrent','pwNew','pwConfirm'].forEach(id => { document.getElementById(id).value = ''; });
+        document.getElementById('pwMsg').classList.remove('show');
+        document.getElementById('pwOk').style.display = 'none';
     } catch { /* silent */ }
+}
+
+// ── Change password ──
+async function changePassword() {
+    const current = document.getElementById('pwCurrent').value;
+    const newPw   = document.getElementById('pwNew').value;
+    const confirm = document.getElementById('pwConfirm').value;
+    const btn     = document.getElementById('pwBtn');
+    const errEl   = document.getElementById('pwMsg');
+    const okEl    = document.getElementById('pwOk');
+
+    errEl.classList.remove('show');
+    okEl.style.display = 'none';
+
+    if (!current || !newPw || !confirm) {
+        errEl.textContent = 'Completa todos los campos.';
+        errEl.classList.add('show'); return;
+    }
+    if (newPw.length < 6) {
+        errEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.';
+        errEl.classList.add('show'); return;
+    }
+    if (newPw !== confirm) {
+        errEl.textContent = 'Las contraseñas no coinciden.';
+        errEl.classList.add('show'); return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> Actualizando…';
+
+    try {
+        const res = await fetch(`${API}/auth/change-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ current_password: current, new_password: newPw })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            ['pwCurrent','pwNew','pwConfirm'].forEach(id => { document.getElementById(id).value = ''; });
+            okEl.style.display = 'block';
+            toast('✅ Contraseña actualizada.', 'ok');
+        } else {
+            const map = {
+                'WRONG_PASSWORD':    'La contraseña actual es incorrecta.',
+                'PASSWORD_TOO_SHORT':'La nueva contraseña debe tener al menos 6 caracteres.',
+            };
+            errEl.textContent = map[data.detail] || data.detail || 'Error al actualizar.';
+            errEl.classList.add('show');
+        }
+    } catch {
+        errEl.textContent = 'Error de red. Intenta de nuevo.';
+        errEl.classList.add('show');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Actualizar contraseña';
+    }
 }
 
 // ── Utilities ──
@@ -421,8 +617,14 @@ function statusBadge(status) {
         approved: ['badge-approved', '✓ Aprobado'],
         rejected: ['badge-rejected', '✕ Rechazado'],
     };
-    const [cls, label] = map[status] || ['', status];
+    const [cls, label] = map[status] || ['', status || '—'];
     return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function roleBadge(role) {
+    return role === 'admin'
+        ? '<span class="badge badge-admin">Administrador</span>'
+        : '<span class="badge badge-user">Usuario</span>';
 }
 
 function escHtml(s) {

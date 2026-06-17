@@ -428,6 +428,61 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        /* Role select inline */
+        .role-select {
+            padding: .25rem .5rem; border: 1.5px solid var(--border);
+            border-radius: 6px; font-size: .8rem; background: #fff;
+            color: var(--text); cursor: pointer;
+        }
+        .role-select:focus { outline: none; border-color: var(--primary); }
+
+        /* Access status banner */
+        .access-banner {
+            border-radius: var(--radius); padding: 1.5rem;
+            display: flex; align-items: center; gap: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+        .access-banner.approved { background: #ecfdf5; border: 1px solid #6ee7b7; }
+        .access-banner.pending  { background: #fffbeb; border: 1px solid #fcd34d; }
+        .access-banner.rejected { background: #fef2f2; border: 1px solid #fca5a5; }
+        .access-banner-icon { font-size: 2.2rem; flex-shrink: 0; }
+        .access-banner-title { font-size: 1.05rem; font-weight: 700; margin-bottom: .2rem; }
+        .access-banner-sub { font-size: .85rem; color: var(--text-muted); line-height: 1.5; }
+        .access-expiry {
+            margin-top: .5rem; display: inline-flex; align-items: center; gap: .4rem;
+            background: rgba(0,0,0,.06); border-radius: 100px;
+            padding: .2rem .7rem; font-size: .8rem; font-weight: 600;
+        }
+
+        /* Device cards (my access) */
+        .device-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 1rem; }
+        .device-card {
+            background: #fff; border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1.1rem 1.25rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.05);
+        }
+        .device-card-header {
+            display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem;
+        }
+        .device-card-icon {
+            width: 38px; height: 38px; border-radius: 10px;
+            background: #ede9fe; display: flex; align-items: center;
+            justify-content: center; font-size: 1.2rem;
+        }
+        .device-card-type { font-size: .88rem; font-weight: 600; }
+        .device-card-os  { font-size: .78rem; color: var(--text-muted); }
+        .device-card-field {
+            display: flex; flex-direction: column; margin-bottom: .45rem;
+        }
+        .device-card-label {
+            font-size: .68rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--text-muted);
+        }
+        .device-card-val {
+            font-size: .83rem; font-weight: 500; font-family: monospace;
+            color: var(--text); word-break: break-all;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%); }
@@ -480,19 +535,25 @@
         </div>
 
         <nav class="sidebar-nav">
-            <button onclick="navigateTo('dashboard')" class="nav-item active" data-page="dashboard">
+            <!-- Admin -->
+            <button onclick="navigateTo('dashboard')" class="nav-item active admin-nav" data-page="dashboard">
                 <span class="nav-icon">📊</span> Dashboard
             </button>
-            <button onclick="navigateTo('pendingUsers')" class="nav-item" data-page="pendingUsers" id="navPending" style="display:none">
+            <button onclick="navigateTo('pendingUsers')" class="nav-item admin-nav" data-page="pendingUsers" id="navPending">
                 <span class="nav-icon">⏳</span> Solicitudes
                 <span class="nav-badge" id="pendingBadge" style="display:none">0</span>
             </button>
-            <button onclick="navigateTo('users')" class="nav-item" data-page="users">
+            <button onclick="navigateTo('users')" class="nav-item admin-nav" data-page="users">
                 <span class="nav-icon">👥</span> Usuarios
             </button>
-            <button onclick="navigateTo('devices')" class="nav-item" data-page="devices">
+            <button onclick="navigateTo('devices')" class="nav-item admin-nav" data-page="devices">
                 <span class="nav-icon">📱</span> Dispositivos
             </button>
+            <!-- User (no admin) -->
+            <button onclick="navigateTo('myAccess')" class="nav-item user-nav" data-page="myAccess" style="display:none">
+                <span class="nav-icon">🌐</span> Mi acceso
+            </button>
+            <!-- All -->
             <button onclick="navigateTo('profile')" class="nav-item" data-page="profile">
                 <span class="nav-icon">⚙️</span> Mi perfil
             </button>
@@ -607,11 +668,12 @@
                                 <th>Cargo</th>
                                 <th>Correo</th>
                                 <th>Estado</th>
+                                <th>Rol</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="usersTable">
-                            <tr class="empty-row"><td colspan="7">Cargando…</td></tr>
+                            <tr class="empty-row"><td colspan="8">Cargando…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -650,13 +712,29 @@
             </div>
         </div>
 
+        <!-- MI ACCESO (usuario regular) -->
+        <div id="myAccessPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Mi acceso WiFi</h1>
+                    <p>Estado de tu cuenta y dispositivos registrados</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="loadMyAccess()">🔄 Actualizar</button>
+            </div>
+            <div id="myAccessContent">
+                <div style="padding:2rem;text-align:center;color:var(--text-muted)">Cargando…</div>
+            </div>
+        </div>
+
         <!-- PERFIL -->
         <div id="profilePage" class="page">
             <div class="page-header">
                 <h1>Mi perfil</h1>
             </div>
-            <div class="profile-wrap">
-                <div class="profile-card" id="profileCard">
+            <div style="display:grid;gap:1.25rem;max-width:680px">
+
+                <!-- Info card -->
+                <div class="profile-card">
                     <div class="profile-cover"></div>
                     <div class="profile-info">
                         <div class="profile-avatar" id="profileAvatar">?</div>
@@ -665,6 +743,35 @@
                         <div class="profile-fields" id="profileFields"></div>
                     </div>
                 </div>
+
+                <!-- Cambiar contraseña -->
+                <div class="section-card">
+                    <div class="section-card-header">🔐 Cambiar contraseña</div>
+                    <div style="padding:1.25rem 1.5rem">
+                        <div id="pwMsg" class="error-msg" style="margin-bottom:.85rem"></div>
+                        <div id="pwOk" style="display:none;background:#ecfdf5;color:#065f46;border:1px solid #6ee7b7;border-radius:8px;padding:.65rem .9rem;font-size:.85rem;margin-bottom:.85rem">
+                            ✅ Contraseña actualizada correctamente.
+                        </div>
+                        <div style="display:grid;gap:.85rem">
+                            <div class="form-group" style="margin:0">
+                                <label for="pwCurrent">Contraseña actual</label>
+                                <input type="password" id="pwCurrent" autocomplete="current-password">
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label for="pwNew">Nueva contraseña</label>
+                                <input type="password" id="pwNew" autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label for="pwConfirm">Confirmar nueva contraseña</label>
+                                <input type="password" id="pwConfirm" autocomplete="new-password">
+                            </div>
+                            <button class="btn btn-primary" id="pwBtn" onclick="changePassword()" style="width:fit-content">
+                                Actualizar contraseña
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -704,6 +811,6 @@
 <!-- Toast -->
 <div id="toast"></div>
 
-<script src="/static/app.js?v=2"></script>
+<script src="/static/app.js?v=3"></script>
 </body>
 </html>
