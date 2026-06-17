@@ -1,11 +1,15 @@
 """Database management with SQLite."""
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
 import aiosqlite
 
-DB_PATH = "data/db.sqlite3"
+# DATA_DIR env var apunta al volumen persistente de Railway (/data).
+# Por defecto usa ./data para desarrollo local.
+_data_dir = os.environ.get("DATA_DIR", "data")
+DB_PATH = os.path.join(_data_dir, "db.sqlite3")
 
 
 async def init_db():

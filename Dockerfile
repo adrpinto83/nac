@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar aplicación
 COPY . .
 
-# Crear directorio de datos
-RUN mkdir -p data
+# Crear directorios de datos (el volumen persistente de Railway se monta en /data)
+RUN mkdir -p /data data
 
 # Exposer puerto
 EXPOSE 8080
