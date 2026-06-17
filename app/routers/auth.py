@@ -159,6 +159,9 @@ class RegisterRequest(BaseModel):
     full_name: str
     email: Optional[str] = None
     phone: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    company: Optional[str] = None
     mac_address: Optional[str] = None
     ip_address: Optional[str] = None
     device_info: Optional[str] = None
@@ -238,10 +241,12 @@ async def register(request: RegisterRequest):
     password_hash = hash_password(request.password)
     await db.execute(
         """INSERT INTO users
-           (username, full_name, email, phone, company, password_hash, role, is_active, approval_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (username, full_name, email, phone, department, position, company,
+            password_hash, role, is_active, approval_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (request.username, request.full_name, request.email, request.phone,
-         request.device_info, password_hash, "user", 0, "pending")
+         request.department, request.position, request.company,
+         password_hash, "user", 0, "pending")
     )
     await db.commit()
 
