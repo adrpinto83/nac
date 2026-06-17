@@ -120,6 +120,30 @@ async def logout():
 
 # ============== PUBLIC REGISTRATION ==============
 
+@router.get("/registration-status")
+async def registration_status(mac: Optional[str] = None):
+    """Estado de registro por MAC — usado por la splash page al reconectarse."""
+    if not mac:
+        return {"status": "not_registered"}
+
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT u.approval_status
+           FROM users u
+           JOIN devices d ON d.user_id = u.id
+           WHERE d.mac_address = ?
+           LIMIT 1""",
+        (mac,)
+    )
+    row = await cursor.fetchone()
+    await db.close()
+
+    if not row:
+        return {"status": "not_registered"}
+
+    return {"status": row[0]}  # pending | approved | rejected
+
+
 def _is_random_mac(mac: str) -> bool:
     """El bit de administración local (bit 1 del primer octeto) indica MAC aleatoria."""
     try:

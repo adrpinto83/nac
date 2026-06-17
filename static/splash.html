@@ -281,21 +281,46 @@
         }
         .btn-login:hover { background: #f0f4ff; }
 
-        /* success */
-        .success-screen {
+        /* Pantalla de estado (éxito, pendiente, rechazado) */
+        .status-screen {
             display: none; text-align: center;
             padding: 3rem 2rem;
+            flex-direction: column; align-items: center; gap: .75rem;
         }
-        .success-screen.show { display: block; }
-        .success-icon {
-            width: 70px; height: 70px; background: #ecfdf5;
+        .status-screen.show { display: flex; }
+        .status-icon {
+            width: 72px; height: 72px;
             border-radius: 50%; display: flex; align-items: center;
-            justify-content: center; font-size: 2rem;
-            margin: 0 auto 1.2rem;
+            justify-content: center; font-size: 2.1rem;
+            margin-bottom: .5rem;
         }
-        .success-screen h2 { font-size: 1.3rem; font-weight: 700; color: var(--text); }
-        .success-screen p { color: var(--muted); font-size: .9rem; margin-top: .5rem; line-height: 1.6; }
-        .countdown { margin-top: 1.25rem; color: var(--primary); font-size: .85rem; font-weight: 500; }
+        .status-icon.green  { background: #ecfdf5; }
+        .status-icon.yellow { background: #fffbeb; }
+        .status-icon.red    { background: #fef2f2; }
+        .status-screen h2 { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+        .status-screen p  { color: var(--muted); font-size: .88rem; line-height: 1.65; max-width: 320px; }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: .4rem;
+            padding: .35rem .9rem; border-radius: 100px;
+            font-size: .8rem; font-weight: 600;
+        }
+        .badge-pending  { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+        .badge-approved { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+        .badge-rejected { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        .pulse {
+            display: inline-block;
+            animation: pulse 1.8s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        .countdown { margin-top: .5rem; color: var(--primary); font-size: .85rem; font-weight: 500; }
+        .btn-outline {
+            margin-top: .75rem; padding: .65rem 1.75rem;
+            background: transparent; color: var(--primary);
+            border: 1.5px solid var(--primary); border-radius: var(--radius-sm);
+            font-size: .88rem; font-weight: 600; cursor: pointer;
+            transition: background .15s;
+        }
+        .btn-outline:hover { background: #f0f4ff; }
 
         /* spinner */
         .spin {
@@ -401,13 +426,41 @@
 
     <!-- Panel derecho -->
     <div class="panel-right">
-        <!-- Éxito -->
-        <div class="success-screen" id="successScreen">
-            <div class="success-icon">✅</div>
-            <h2>¡Registro exitoso!</h2>
-            <p>Tu solicitud fue enviada.<br>
-               Un administrador revisará tu cuenta y te dará acceso en breve.</p>
+
+        <!-- Registro enviado (recién registrado) -->
+        <div class="status-screen" id="screenSuccess">
+            <div class="status-icon green">✅</div>
+            <h2>¡Solicitud enviada!</h2>
+            <span class="status-badge badge-pending">⏳ Pendiente de aprobación</span>
+            <p>Tu registro fue recibido. Un administrador revisará tu cuenta y te dará acceso pronto.<br>No es necesario que vuelvas a registrarte.</p>
             <div class="countdown" id="countdown"></div>
+        </div>
+
+        <!-- Ya registrado, esperando aprobación -->
+        <div class="status-screen" id="screenPending">
+            <div class="status-icon yellow"><span class="pulse">⏳</span></div>
+            <h2>Solicitud en proceso</h2>
+            <span class="status-badge badge-pending">Pendiente de aprobación</span>
+            <p>Ya te registraste en esta red. Tu solicitud está siendo revisada por un administrador.<br>
+               Cuando sea aprobada, podrás navegar con normalidad.</p>
+            <button class="btn-outline" onclick="location.reload()">🔄 Verificar estado</button>
+        </div>
+
+        <!-- Aprobado pero sin internet (hotspot aún no sincronizado) -->
+        <div class="status-screen" id="screenApproved">
+            <div class="status-icon green">🎉</div>
+            <h2>¡Acceso aprobado!</h2>
+            <span class="status-badge badge-approved">✓ Aprobado</span>
+            <p>Tu cuenta fue aprobada. Desconéctate y vuelve a conectar al WiFi para activar tu acceso a internet.</p>
+            <button class="btn-outline" onclick="location.reload()">🔄 Recargar</button>
+        </div>
+
+        <!-- Rechazado -->
+        <div class="status-screen" id="screenRejected">
+            <div class="status-icon red">🚫</div>
+            <h2>Solicitud rechazada</h2>
+            <span class="status-badge badge-rejected">Rechazado</span>
+            <p>Tu solicitud no fue aprobada. Contacta al administrador de red para más información.</p>
         </div>
 
         <!-- Bloqueo MAC aleatoria -->
@@ -540,6 +593,20 @@
 
 <script>
 (function () {
+    // ── Helpers ──
+    const API = window.location.origin + '/api';
+
+    function showScreen(id) {
+        ['screenSuccess','screenPending','screenApproved','screenRejected','macBlock']
+            .forEach(s => {
+                const el = document.getElementById(s);
+                if (el) { el.classList.remove('show'); el.style.display = ''; }
+            });
+        document.getElementById('formSection').style.display = 'none';
+        const target = document.getElementById(id);
+        if (target) target.classList.add('show');
+    }
+
     // ── Leer parámetros del router (inyectados por MikroTik hotspot) ──
     const params = new URLSearchParams(location.search);
     const routerMAC      = params.get('mac')      || '';
@@ -627,11 +694,15 @@
         } catch { return false; }
     }
 
-    if (routerMAC && isRandomMAC(routerMAC)) {
-        // Bloquear: ocultar formulario, mostrar instrucciones
-        document.getElementById('formSection').style.display = 'none';
-        document.getElementById('macBlock').classList.add('show');
-        document.getElementById('macBlockVal').textContent = routerMAC;
+    // ── Verificar estado de registro por MAC ──
+    async function checkAndRender() {
+        if (!routerMAC) return; // sin MAC del router → mostrar formulario directamente
+
+        if (isRandomMAC(routerMAC)) {
+            showScreen('macBlock');
+            document.getElementById('macBlock').classList.add('show');
+            document.getElementById('formSection').style.display = 'none';
+            document.getElementById('macBlockVal').textContent = routerMAC;
 
         // Auto-seleccionar pestaña según OS detectado
         const osLower = d.os.toLowerCase();
@@ -646,16 +717,38 @@
             i.classList.toggle('show', i.id === 'inst-' + defaultTab);
         });
 
-        // Tabs click
-        document.getElementById('osTabs').addEventListener('click', function (e) {
-            const tab = e.target.closest('.os-tab');
-            if (!tab) return;
-            document.querySelectorAll('.os-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            document.querySelectorAll('.os-instructions').forEach(i => i.classList.remove('show'));
-            document.getElementById('inst-' + tab.dataset.os).classList.add('show');
-        });
+            // Tabs click
+            document.getElementById('osTabs').addEventListener('click', function (e) {
+                const tab = e.target.closest('.os-tab');
+                if (!tab) return;
+                document.querySelectorAll('.os-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.os-instructions').forEach(i => i.classList.remove('show'));
+                document.getElementById('inst-' + tab.dataset.os).classList.add('show');
+            });
+            return; // no continuar con la verificación de estado
+        }
+
+        // MAC fija: consultar estado de registro
+        try {
+            const res = await fetch(API + '/auth/registration-status?mac=' + encodeURIComponent(routerMAC));
+            const data = await res.json();
+            const status = data.status;
+
+            if (status === 'pending') {
+                showScreen('screenPending');
+            } else if (status === 'approved') {
+                showScreen('screenApproved');
+            } else if (status === 'rejected') {
+                showScreen('screenRejected');
+            }
+            // 'not_registered' → dejar el formulario visible (no hacer nada)
+        } catch {
+            // Error de red → mostrar formulario igualmente
+        }
     }
+
+    checkAndRender();
 
     // ── Auto-sugerir usuario desde nombre completo ──
     document.getElementById('fullName').addEventListener('input', function () {
@@ -681,8 +774,6 @@
     });
 
     // ── Enviar formulario ──
-    const API = window.location.origin + '/api';
-
     document.getElementById('regForm').addEventListener('submit', async function (e) {
         e.preventDefault();
 
@@ -737,9 +828,7 @@
             const data = await res.json();
 
             if (res.ok) {
-                document.getElementById('formSection').style.display = 'none';
-                const sc = document.getElementById('successScreen');
-                sc.classList.add('show');
+                showScreen('screenSuccess');
 
                 let secs = 15;
                 const ct = document.getElementById('countdown');
