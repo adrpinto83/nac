@@ -484,14 +484,18 @@ async def approve_user(
     await db.close()
 
     if devices:
-        try:
-            from app.services.mikrotik_client import MikroTikClient
-            async with MikroTikClient() as client:
-                for device in devices:
-                    if device[0]:
-                        await client.add_authenticated_user(device[0], user_username)
-        except Exception as e:
-            logger.warning(f"Could not sync MAC to router: {str(e)}")
+        import asyncio
+        async def _try_sync():
+            try:
+                from app.services.mikrotik_client import MikroTikClient
+                async with MikroTikClient(timeout=3) as client:
+                    for device in devices:
+                        if device[0]:
+                            await client.add_authenticated_user(device[0], user_username)
+                logger.info(f"MAC sync inmediato OK para {user_username}")
+            except Exception as e:
+                logger.warning(f"MAC sync inmediato falló (el agente WSL lo reintentará): {e}")
+        asyncio.create_task(_try_sync())
 
     return {"message": "User approved", "expires_at": expires_at}
 

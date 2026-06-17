@@ -20,9 +20,9 @@ class MikroTikClient:
     def __init__(
         self,
         host: str = "192.168.88.1",
-        port: int = 8728,
+        port: int = 80,
         username: str = "admin",
-        password: str = "",
+        password: str = "Mikrotik2025*",
         timeout: int = 10
     ):
         self.host = host
@@ -93,14 +93,15 @@ class MikroTikClient:
                 logger.error(f"Método no soportado: {method}")
                 return None
 
+            if response.status_code == 204 or not response.content:
+                return {}  # success with no body (DELETE)
             if response.status_code in [200, 201]:
                 try:
                     return response.json()
-                except:
+                except Exception:
                     return response.text
-            else:
-                logger.warning(f"{method} {endpoint} → {response.status_code}")
-                return None
+            logger.warning(f"{method} {endpoint} → {response.status_code}")
+            return None
 
         except Exception as e:
             logger.error(f"Error en request: {e}")
@@ -336,70 +337,65 @@ class MikroTikClient:
 
     async def add_authenticated_user(self, mac_address: str, username: str = "") -> bool:
         """
-        Agregar MAC de usuario autenticado a lista de firewall
-        Se ejecuta cuando admin aprueba un usuario en NAC
+        Agregar MAC de usuario aprobado como ip-binding type=bypassed en el hotspot.
+        Se ejecuta cuando admin aprueba un usuario en NAC.
         """
-        comment = f"NAC: {username}" if username else "NAC: Approved"
-        return await self.add_to_address_list(
-            list_name="authenticated-users",
-            address=mac_address,
-            comment=comment
-        )
+        safe_user = (username or "user").replace('"', "")
+        result = await self._request("PUT", "/ip/hotspot/ip-binding", {
+            "mac-address": mac_address.upper(),
+            "type": "bypassed",
+            "comment": f"NAC:{safe_user}"
+        })
+        return result is not None
 
     async def remove_authenticated_user(self, mac_address: str) -> bool:
         """
-        Remover MAC de usuario de lista de firewall
-        Se ejecuta cuando un usuario es rechazado o suspendido
+        Remover MAC de usuario de ip-binding del hotspot.
+        Se ejecuta cuando un usuario es rechazado o suspendido.
         """
-        address_lists = await self.get_address_lists()
+        bindings = await self._request("GET", "/ip/hotspot/ip-binding")
+        if not isinstance(bindings, list):
+            return False
 
-        for item in address_lists:
-            if (item.get("list") == "authenticated-users" and
-                item.get("address") == mac_address):
-                item_id = item.get(".id")
-                if item_id:
-                    return await self.remove_from_address_list(item_id)
-
+        mac_upper = mac_address.upper()
+        for b in bindings:
+            if b.get("mac-address", "").upper() == mac_upper and "NAC:" in b.get("comment", ""):
+                bid = b.get(".id")
+                if bid:
+                    result = await self._request("DELETE", f"/ip/hotspot/ip-binding/{bid}")
+                    return True
         return False
 
-    async def sync_approved_users(self, approved_macs: List[str]) -> Dict[str, bool]:
+    async def sync_approved_users(self, approved_macs: List[str]) -> Dict[str, List]:
         """
-        Sincronizar todos los MACs aprobados con el router
-        Se ejecuta periódicamente o cuando hay cambios
+        Sincronizar todos los MACs aprobados con ip-binding del hotspot.
+        Se ejecuta periódicamente o cuando hay cambios.
         """
-        current_lists = await self.get_address_lists()
-        current_macs = [
-            item.get("address") for item in current_lists
-            if item.get("list") == "authenticated-users"
-        ]
+        bindings = await self._request("GET", "/ip/hotspot/ip-binding")
+        if not isinstance(bindings, list):
+            bindings = []
 
-        results = {
-            "added": [],
-            "removed": [],
-            "errors": []
-        }
+        nac_bindings = [b for b in bindings if "NAC:" in b.get("comment", "")]
+        current_macs = {b.get("mac-address", "").upper(): b.get(".id") for b in nac_bindings}
+        target_macs = {m.upper() for m in approved_macs if m}
 
-        # Agregar nuevos MACs
-        for mac in approved_macs:
-            if mac not in current_macs:
+        results = {"added": [], "removed": [], "errors": []}
+
+        for mac in target_macs - current_macs.keys():
+            try:
+                ok = await self.add_authenticated_user(mac)
+                if ok:
+                    results["added"].append(mac)
+                else:
+                    results["errors"].append(f"Failed to add {mac}")
+            except Exception as e:
+                results["errors"].append(f"{mac}: {str(e)}")
+
+        for mac, bid in current_macs.items():
+            if mac not in target_macs:
                 try:
-                    success = await self.add_authenticated_user(mac)
-                    if success:
-                        results["added"].append(mac)
-                    else:
-                        results["errors"].append(f"Failed to add {mac}")
-                except Exception as e:
-                    results["errors"].append(f"{mac}: {str(e)}")
-
-        # Remover MACs que ya no están aprobados
-        for mac in current_macs:
-            if mac not in approved_macs and mac != "0.0.0.0/0":
-                try:
-                    success = await self.remove_authenticated_user(mac)
-                    if success:
-                        results["removed"].append(mac)
-                    else:
-                        results["errors"].append(f"Failed to remove {mac}")
+                    await self._request("DELETE", f"/ip/hotspot/ip-binding/{bid}")
+                    results["removed"].append(mac)
                 except Exception as e:
                     results["errors"].append(f"{mac}: {str(e)}")
 
