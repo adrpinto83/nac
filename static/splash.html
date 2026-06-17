@@ -178,6 +178,80 @@
         .msg.ok  { background:#ecfdf5; color:#065f46; border:1px solid #6ee7b7; display:block; }
         .msg.err { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; display:block; }
 
+        /* Bloqueo MAC aleatoria */
+        .mac-block {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 2rem 1.75rem;
+            gap: 1rem;
+        }
+        .mac-block.show { display: flex; }
+        .mac-block-icon {
+            width: 64px; height: 64px;
+            background: #fff7ed; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem;
+        }
+        .mac-block h2 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+        .mac-block .mac-block-sub {
+            font-size: .85rem; color: var(--muted); line-height: 1.6; max-width: 340px;
+        }
+        .mac-block .mac-val {
+            font-family: monospace; font-size: .9rem;
+            background: #fef2f2; color: var(--error);
+            padding: .3rem .75rem; border-radius: 6px;
+            border: 1px solid #fca5a5;
+        }
+        .steps-title {
+            font-size: .78rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--muted); margin-bottom: .5rem;
+        }
+        .os-tabs {
+            display: flex; gap: .4rem; flex-wrap: wrap; justify-content: center;
+        }
+        .os-tab {
+            padding: .35rem .75rem; border-radius: 100px;
+            border: 1.5px solid var(--border); background: white;
+            font-size: .8rem; cursor: pointer; transition: all .15s;
+            color: var(--text);
+        }
+        .os-tab.active {
+            border-color: var(--primary); background: #ede9fe; color: var(--primary-dk);
+            font-weight: 600;
+        }
+        .os-instructions { display: none; width: 100%; }
+        .os-instructions.show { display: block; }
+        .steps {
+            list-style: none;
+            background: #f8faff;
+            border: 1px solid #e0e7ff;
+            border-radius: var(--radius-sm);
+            padding: .9rem 1rem;
+            text-align: left;
+        }
+        .steps li {
+            display: flex; gap: .6rem;
+            font-size: .82rem; color: var(--text);
+            padding: .3rem 0; line-height: 1.4;
+        }
+        .steps li:not(:last-child) { border-bottom: 1px solid #e0e7ff; }
+        .step-num {
+            width: 18px; height: 18px; min-width: 18px;
+            background: var(--primary); color: white;
+            border-radius: 50%; font-size: .7rem; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            margin-top: .05rem;
+        }
+        .btn-retry {
+            margin-top: .5rem;
+            padding: .7rem 2rem;
+            background: var(--primary); color: white;
+            border: none; border-radius: var(--radius-sm);
+            font-size: .9rem; font-weight: 600; cursor: pointer;
+        }
+
         /* submit */
         .btn-submit {
             width: 100%; margin-top: 1.1rem;
@@ -336,6 +410,69 @@
             <div class="countdown" id="countdown"></div>
         </div>
 
+        <!-- Bloqueo MAC aleatoria -->
+        <div class="mac-block" id="macBlock">
+            <div class="mac-block-icon">⚠️</div>
+            <h2>MAC aleatoria detectada</h2>
+            <p class="mac-block-sub">
+                Tu dispositivo usa una <strong>dirección MAC aleatoria</strong>.
+                Esta red requiere una MAC fija para identificar tu dispositivo de forma permanente.
+                Debes desactivar la aleatorización antes de registrarte.
+            </p>
+            <div class="mac-val" id="macBlockVal"></div>
+
+            <div style="width:100%">
+                <div class="steps-title">Instrucciones para desactivar MAC aleatoria</div>
+                <div class="os-tabs" id="osTabs">
+                    <button class="os-tab active" data-os="android">🤖 Android</button>
+                    <button class="os-tab" data-os="ios">🍎 iPhone / iPad</button>
+                    <button class="os-tab" data-os="windows">🪟 Windows</button>
+                    <button class="os-tab" data-os="other">Otro</button>
+                </div>
+
+                <div class="os-instructions show" id="inst-android">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Abre <strong>Ajustes</strong> → <strong>Conexiones</strong> → <strong>Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Mantén presionado el nombre de la red <strong>DesarrolloWiFi</strong></li>
+                        <li><span class="step-num">3</span>Selecciona <strong>Administrar configuración de red</strong></li>
+                        <li><span class="step-num">4</span>Toca <strong>Opciones avanzadas</strong></li>
+                        <li><span class="step-num">5</span>En <strong>Tipo de dirección MAC</strong>, elige <strong>MAC del teléfono</strong></li>
+                        <li><span class="step-num">6</span>Desconéctate y vuelve a conectar al WiFi</li>
+                    </ul>
+                </div>
+
+                <div class="os-instructions" id="inst-ios">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Abre <strong>Ajustes</strong> → <strong>Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Toca el ícono <strong>ⓘ</strong> junto a <strong>DesarrolloWiFi</strong></li>
+                        <li><span class="step-num">3</span>Desactiva <strong>Dirección Wi-Fi privada</strong></li>
+                        <li><span class="step-num">4</span>Confirma tocando <strong>Continuar</strong></li>
+                        <li><span class="step-num">5</span>El dispositivo se reconectará automáticamente</li>
+                    </ul>
+                </div>
+
+                <div class="os-instructions" id="inst-windows">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Abre <strong>Configuración</strong> → <strong>Red e Internet</strong> → <strong>Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Haz clic en <strong>Administrar redes conocidas</strong></li>
+                        <li><span class="step-num">3</span>Selecciona <strong>DesarrolloWiFi</strong> → <strong>Propiedades</strong></li>
+                        <li><span class="step-num">4</span>En <strong>Dirección de hardware aleatoria</strong>, selecciona <strong>Desactivado</strong></li>
+                        <li><span class="step-num">5</span>Desconéctate y vuelve a conectar al WiFi</li>
+                    </ul>
+                </div>
+
+                <div class="os-instructions" id="inst-other">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Busca en los ajustes de red la opción <strong>MAC aleatoria</strong> o <strong>Privacidad Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Desactívala para la red <strong>DesarrolloWiFi</strong></li>
+                        <li><span class="step-num">3</span>Reconéctate al WiFi y recarga esta página</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button class="btn-retry" onclick="location.reload()">🔄 Ya la desactivé, recargar</button>
+        </div>
+
         <!-- Formulario -->
         <div id="formSection">
             <div class="form-header">
@@ -478,8 +615,47 @@
     setText('infoType', d.type);
     setText('infoOS',   d.os + (d.osVer ? ' ' + d.osVer : ''));
     setText('infoBrowser', d.browser + (d.bVer ? ' ' + d.bVer : ''));
-    setText('infoIP',  routerIP       || '—');
-    setText('infoMAC', routerMAC      || '—');
+    setText('infoIP',  routerIP  || '—');
+    setText('infoMAC', routerMAC || '—');
+
+    // ── Detectar MAC aleatoria (bit de administración local) ──
+    function isRandomMAC(mac) {
+        if (!mac) return false;
+        try {
+            const first = parseInt(mac.replace(/-/g,':').split(':')[0], 16);
+            return !!(first & 0x02);
+        } catch { return false; }
+    }
+
+    if (routerMAC && isRandomMAC(routerMAC)) {
+        // Bloquear: ocultar formulario, mostrar instrucciones
+        document.getElementById('formSection').style.display = 'none';
+        document.getElementById('macBlock').classList.add('show');
+        document.getElementById('macBlockVal').textContent = routerMAC;
+
+        // Auto-seleccionar pestaña según OS detectado
+        const osLower = d.os.toLowerCase();
+        let defaultTab = 'android';
+        if (osLower.includes('ios') || osLower.includes('ipad')) defaultTab = 'ios';
+        else if (osLower.includes('windows'))                     defaultTab = 'windows';
+
+        document.querySelectorAll('.os-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.os === defaultTab);
+        });
+        document.querySelectorAll('.os-instructions').forEach(i => {
+            i.classList.toggle('show', i.id === 'inst-' + defaultTab);
+        });
+
+        // Tabs click
+        document.getElementById('osTabs').addEventListener('click', function (e) {
+            const tab = e.target.closest('.os-tab');
+            if (!tab) return;
+            document.querySelectorAll('.os-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelectorAll('.os-instructions').forEach(i => i.classList.remove('show'));
+            document.getElementById('inst-' + tab.dataset.os).classList.add('show');
+        });
+    }
 
     // ── Auto-sugerir usuario desde nombre completo ──
     document.getElementById('fullName').addEventListener('input', function () {
@@ -575,7 +751,10 @@
                 }, 1000);
             } else {
                 msg.className = 'msg err';
-                const errMap = { 'Username already exists': 'Ese nombre de usuario ya existe.' };
+                const errMap = {
+                    'Username already exists': 'Ese nombre de usuario ya existe.',
+                    'MAC_RANDOMIZED': 'Tu dispositivo usa MAC aleatoria. Desactívala y vuelve a conectarte al WiFi.'
+                };
                 msg.textContent = errMap[data.detail] || data.detail || 'Error al registrar. Intenta de nuevo.';
                 btn.disabled = false;
                 btn.textContent = 'Solicitar acceso';

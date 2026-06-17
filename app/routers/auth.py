@@ -119,6 +119,16 @@ async def logout():
 
 
 # ============== PUBLIC REGISTRATION ==============
+
+def _is_random_mac(mac: str) -> bool:
+    """El bit de administración local (bit 1 del primer octeto) indica MAC aleatoria."""
+    try:
+        first_octet = int(mac.replace('-', ':').split(':')[0], 16)
+        return bool(first_octet & 0x02)
+    except (ValueError, IndexError):
+        return False
+
+
 class RegisterRequest(BaseModel):
     username: str
     password: str
@@ -144,6 +154,14 @@ class PendingUserResponse(BaseModel):
 async def register(request: RegisterRequest):
     """Register a new user (pending approval)."""
     db = await get_db()
+
+    # Rechazar MACs aleatorias (bit de administración local activado)
+    if request.mac_address and _is_random_mac(request.mac_address):
+        await db.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MAC_RANDOMIZED"
+        )
 
     # Check if user exists
     cursor = await db.execute(
