@@ -627,6 +627,28 @@
                             <div class="hint">Tu puesto o motivo de visita</div>
                         </div>
 
+                        <!-- Campos de visita (se muestran solo para Visita / Externo) -->
+                        <div class="full" id="ticketRow" style="display:none">
+                            <div class="section-divider">Acceso de visita</div>
+                        </div>
+                        <div id="ticketField" style="display:none">
+                            <label for="ticketNumber">Número de ticket</label>
+                            <input type="text" id="ticketNumber"
+                                   placeholder="Ej: TKT-2024-0123"
+                                   autocapitalize="characters" spellcheck="false">
+                            <div class="hint">Ticket de autorización de visita</div>
+                        </div>
+                        <div id="durationField" style="display:none">
+                            <label for="accessDuration">Duración del acceso</label>
+                            <select id="accessDuration">
+                                <option value="4">4 horas</option>
+                                <option value="8" selected>8 horas (recomendado)</option>
+                                <option value="24">1 día</option>
+                                <option value="48">2 días</option>
+                                <option value="168">1 semana</option>
+                            </select>
+                        </div>
+
                         <!-- Contacto -->
                         <div class="section-divider full">Contacto <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></div>
 
@@ -817,6 +839,19 @@
 
     checkAndRender();
 
+    // ── Mostrar/ocultar campos de visita ──
+    function setVisitorFields(show) {
+        ['ticketRow','ticketField','durationField'].forEach(id => {
+            document.getElementById(id).style.display = show ? '' : 'none';
+        });
+        const tn = document.getElementById('ticketNumber');
+        if (show) tn.setAttribute('required', '');
+        else { tn.removeAttribute('required'); tn.value = ''; }
+    }
+    document.getElementById('department').addEventListener('change', function () {
+        setVisitorFields(this.value === 'Visita / Externo');
+    });
+
     // ── Auto-sugerir usuario desde nombre completo ──
     document.getElementById('fullName').addEventListener('input', function () {
         const uEl = document.getElementById('username');
@@ -844,13 +879,16 @@
     document.getElementById('regForm').addEventListener('submit', async function (e) {
         e.preventDefault();
 
-        const fullName = document.getElementById('fullName').value.trim();
-        const username   = document.getElementById('username').value.trim();
-        const password   = document.getElementById('password').value;
-        const department = document.getElementById('department').value;
-        const position   = document.getElementById('position').value.trim();
-        const email      = document.getElementById('email').value.trim();
-        const phone      = document.getElementById('phone').value.trim();
+        const fullName    = document.getElementById('fullName').value.trim();
+        const username    = document.getElementById('username').value.trim();
+        const password    = document.getElementById('password').value;
+        const department  = document.getElementById('department').value;
+        const position    = document.getElementById('position').value.trim();
+        const email       = document.getElementById('email').value.trim();
+        const phone       = document.getElementById('phone').value.trim();
+        const isVisitor   = department === 'Visita / Externo';
+        const ticketNumber = isVisitor ? document.getElementById('ticketNumber').value.trim() : null;
+        const accessDuration = isVisitor ? parseInt(document.getElementById('accessDuration').value, 10) : null;
 
         const btn = document.getElementById('submitBtn');
         const msg = document.getElementById('msg');
@@ -858,6 +896,11 @@
         if (!fullName || !username || !password || !department) {
             msg.className = 'msg err';
             msg.textContent = 'Completa los campos requeridos (nombre, usuario, contraseña y departamento).';
+            return;
+        }
+        if (isVisitor && !ticketNumber) {
+            msg.className = 'msg err';
+            msg.textContent = 'Las visitas deben ingresar el número de ticket de autorización.';
             return;
         }
         if (password.length < 6) {
@@ -885,14 +928,16 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     username, password,
-                    full_name:   fullName,
-                    department:  department  || null,
-                    position:    position    || null,
-                    email:       email       || null,
-                    phone:       phone       || null,
-                    mac_address: routerMAC   || null,
-                    ip_address:  routerIP    || null,
-                    device_info: deviceInfo
+                    full_name:            fullName,
+                    department:           department      || null,
+                    position:             position        || null,
+                    email:                email           || null,
+                    phone:                phone           || null,
+                    ticket_number:        ticketNumber    || null,
+                    access_duration_hours: accessDuration || null,
+                    mac_address:          routerMAC       || null,
+                    ip_address:           routerIP        || null,
+                    device_info:          deviceInfo
                 })
             });
 

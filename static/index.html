@@ -1,322 +1,709 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NAC System - Network Access Control</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>Portal Administrativo – Control de Acceso WiFi</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary:    #4f46e5;
+            --primary-dk: #3730a3;
+            --accent:     #7c3aed;
+            --success:    #059669;
+            --warning:    #d97706;
+            --danger:     #dc2626;
+            --text:       #111827;
+            --text-muted: #6b7280;
+            --border:     #e5e7eb;
+            --bg:         #f3f4f6;
+            --sidebar-w:  240px;
+            --radius:     12px;
+            --radius-sm:  8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── LOGIN ── */
+        #loginContainer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #a855f7 100%);
+        }
+        .login-box {
+            background: #fff;
+            border-radius: var(--radius);
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 24px 80px rgba(0,0,0,.25);
+        }
+        .login-header { text-align: center; margin-bottom: 1.75rem; }
+        .login-header .login-icon {
+            width: 64px; height: 64px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 1.8rem; margin-bottom: .75rem;
+        }
+        .login-header h1 { font-size: 1.4rem; font-weight: 700; color: var(--text); }
+        .login-header p  { font-size: .85rem; color: var(--text-muted); margin-top: .2rem; }
+
+        .form-group { margin-bottom: 1rem; }
+        .form-group label {
+            display: block; font-size: .82rem; font-weight: 600;
+            color: var(--text); margin-bottom: .35rem;
+        }
+        .form-group input, .form-group select {
+            width: 100%; padding: .65rem .85rem;
+            border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-size: .93rem; color: var(--text); background: #fff;
+            transition: border-color .18s, box-shadow .18s;
+            -webkit-appearance: none; min-height: 42px;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+            padding: .65rem 1.25rem; border-radius: var(--radius-sm);
+            border: none; font-size: .88rem; font-weight: 600; cursor: pointer;
+            transition: opacity .15s, transform .1s; min-height: 38px;
+        }
+        .btn:hover:not(:disabled) { opacity: .88; }
+        .btn:disabled { opacity: .55; cursor: not-allowed; }
+        .btn-primary  { background: var(--primary); color: #fff; }
+        .btn-success  { background: var(--success); color: #fff; }
+        .btn-danger   { background: var(--danger);  color: #fff; }
+        .btn-warning  { background: var(--warning); color: #fff; }
+        .btn-ghost    { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+        .btn-ghost:hover { background: #ede9fe; }
+        .btn-block    { width: 100%; }
+        .btn-sm       { padding: .4rem .85rem; font-size: .8rem; min-height: 32px; }
+
+        .error-msg {
+            background: #fef2f2; color: #991b1b;
+            border: 1px solid #fca5a5; border-radius: var(--radius-sm);
+            padding: .65rem .9rem; font-size: .85rem; margin-top: .75rem;
+            display: none;
+        }
+        .error-msg.show { display: block; }
+
+        /* ── APP SHELL ── */
+        #appContainer { display: none; flex-direction: row; min-height: 100vh; }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+            display: flex; flex-direction: column;
+            position: fixed; top: 0; left: 0; bottom: 0;
+            z-index: 100;
+            transition: transform .25s;
+        }
+        .sidebar-header {
+            padding: 1.5rem 1.25rem 1rem;
+            border-bottom: 1px solid rgba(255,255,255,.1);
+        }
+        .sidebar-logo {
+            display: flex; align-items: center; gap: .65rem; margin-bottom: .5rem;
+        }
+        .sidebar-logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, #818cf8, #a78bfa);
+            border-radius: 9px; display: flex; align-items: center;
+            justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+        }
+        .sidebar-logo span { color: #fff; font-size: 1.1rem; font-weight: 700; }
+        .sidebar-user {
+            font-size: .78rem; color: rgba(255,255,255,.55);
+            display: flex; align-items: center; gap: .4rem;
+        }
+        .sidebar-user-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #34d399; flex-shrink: 0;
+        }
+
+        .sidebar-nav { flex: 1; padding: .75rem 0; overflow-y: auto; }
+        .nav-item {
+            display: flex; align-items: center; gap: .65rem;
+            width: 100%; padding: .7rem 1.25rem;
+            background: none; border: none; cursor: pointer;
+            color: rgba(255,255,255,.6); font-size: .88rem; font-weight: 500;
+            text-align: left; border-left: 3px solid transparent;
+            transition: all .15s;
+        }
+        .nav-item:hover { color: #fff; background: rgba(255,255,255,.06); }
+        .nav-item.active {
+            color: #fff; background: rgba(255,255,255,.1);
+            border-left-color: #818cf8;
+        }
+        .nav-icon { font-size: 1.05rem; flex-shrink: 0; }
+        .nav-badge {
+            margin-left: auto; background: #ef4444; color: #fff;
+            border-radius: 100px; padding: .1rem .45rem;
+            font-size: .72rem; font-weight: 700; min-width: 20px; text-align: center;
+        }
+
+        .sidebar-footer {
+            padding: 1rem 1.25rem;
+            border-top: 1px solid rgba(255,255,255,.1);
+        }
+        .btn-logout {
+            width: 100%; padding: .6rem; background: rgba(239,68,68,.15);
+            color: #fca5a5; border: 1px solid rgba(239,68,68,.3);
+            border-radius: var(--radius-sm); font-size: .85rem; font-weight: 600;
+            cursor: pointer; transition: background .15s;
+        }
+        .btn-logout:hover { background: rgba(239,68,68,.28); }
+
+        /* Main */
+        .main-content {
+            margin-left: var(--sidebar-w);
+            flex: 1; padding: 2rem;
+            min-height: 100vh;
+        }
+
+        /* Page */
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .page-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 1.75rem; gap: 1rem; flex-wrap: wrap;
+        }
+        .page-header h1 { font-size: 1.35rem; font-weight: 700; }
+        .page-header p  { font-size: .88rem; color: var(--text-muted); margin-top: .2rem; }
+
+        /* Stat cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem; margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: #fff; border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            display: flex; align-items: center; gap: 1rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        .stat-icon {
+            width: 48px; height: 48px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem; flex-shrink: 0;
+        }
+        .stat-icon.purple  { background: #ede9fe; }
+        .stat-icon.blue    { background: #dbeafe; }
+        .stat-icon.green   { background: #d1fae5; }
+        .stat-icon.yellow  { background: #fef3c7; }
+        .stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1; }
+        .stat-label { font-size: .78rem; color: var(--text-muted); margin-top: .2rem; }
+
+        /* Section card */
+        .section-card {
+            background: #fff; border-radius: var(--radius);
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            overflow: hidden; margin-bottom: 1.5rem;
+        }
+        .section-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1rem 1.5rem; border-bottom: 1px solid var(--border);
+            font-size: .9rem; font-weight: 600;
+        }
+
+        /* Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+        thead th {
+            padding: .7rem 1rem; text-align: left;
+            font-size: .72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--text-muted);
+            border-bottom: 1px solid var(--border); background: #fafafa;
+            white-space: nowrap;
+        }
+        tbody td {
+            padding: .75rem 1rem; border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: #fafafa; }
+        .empty-row td { text-align: center; padding: 2.5rem; color: var(--text-muted); }
+
+        /* Search */
+        .search-wrap { padding: .85rem 1.5rem; border-bottom: 1px solid var(--border); }
+        .search-wrap input {
+            width: 100%; padding: .55rem .85rem;
+            border: 1.5px solid var(--border); border-radius: 100px;
+            font-size: .875rem; color: var(--text); background: #f9fafb;
+            transition: border-color .15s;
+        }
+        .search-wrap input:focus { outline: none; border-color: var(--primary); background: #fff; }
+
+        /* Badges */
+        .badge {
+            display: inline-flex; align-items: center; gap: .3rem;
+            padding: .2rem .6rem; border-radius: 100px;
+            font-size: .75rem; font-weight: 600;
+        }
+        .badge-pending  { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+        .badge-approved { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+        .badge-rejected { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        .badge-admin    { background: #ede9fe; color: #4c1d95; border: 1px solid #c4b5fd; }
+        .badge-user     { background: #f0f9ff; color: #0c4a6e; border: 1px solid #bae6fd; }
+
+        /* Pending cards */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 1.25rem;
+            padding: 1.5rem;
+        }
+        .pending-card {
+            background: #fff; border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .card-header-strip {
+            height: 4px;
+            background: linear-gradient(to right, var(--primary), var(--accent));
+        }
+        .card-body { padding: 1.1rem 1.25rem; flex: 1; }
+        .card-name {
+            font-size: 1rem; font-weight: 700; margin-bottom: .2rem;
+        }
+        .card-username { font-size: .8rem; color: var(--text-muted); margin-bottom: .75rem; }
+        .card-meta {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: .4rem .75rem; margin-bottom: .75rem;
+        }
+        .card-meta-item { display: flex; flex-direction: column; }
+        .card-meta-label {
+            font-size: .68rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--text-muted);
+        }
+        .card-meta-value { font-size: .82rem; font-weight: 500; color: var(--text); }
+        .card-meta-value.mono { font-family: monospace; font-size: .8rem; }
+        .card-ticket {
+            background: #fffbeb; border: 1px solid #fcd34d;
+            border-radius: var(--radius-sm); padding: .45rem .75rem;
+            margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem;
+            font-size: .83rem; font-weight: 600; color: #92400e;
+        }
+        .card-device {
+            background: #f8faff; border: 1px solid #e0e7ff;
+            border-radius: var(--radius-sm); padding: .5rem .75rem;
+            margin-bottom: .75rem;
+        }
+        .card-device-row {
+            display: flex; gap: .5rem; align-items: center;
+            font-size: .8rem; color: var(--text-muted);
+        }
+        .card-device-row + .card-device-row { margin-top: .25rem; }
+        .card-date { font-size: .75rem; color: var(--text-muted); margin-bottom: .25rem; }
+        .card-footer {
+            padding: .85rem 1.25rem; border-top: 1px solid var(--border);
+            display: flex; gap: .6rem; justify-content: flex-end;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,.45);
+            display: none; align-items: center; justify-content: center;
+            z-index: 1000; padding: 1rem;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-box {
+            background: #fff; border-radius: var(--radius);
+            width: 100%; max-width: 460px;
+            box-shadow: 0 24px 80px rgba(0,0,0,.3);
+            overflow: hidden;
+        }
+        .modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+        }
+        .modal-header h3 { font-size: 1.05rem; font-weight: 700; }
+        .modal-close {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: var(--bg); border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; color: var(--text-muted);
+        }
+        .modal-close:hover { background: var(--border); }
+        .modal-body { padding: 1.25rem 1.5rem; }
+        .modal-footer {
+            padding: 1rem 1.5rem; border-top: 1px solid var(--border);
+            display: flex; gap: .65rem; justify-content: flex-end;
+        }
+        .modal-user-preview {
+            background: #f8faff; border: 1px solid #e0e7ff;
+            border-radius: var(--radius-sm); padding: .85rem 1rem;
+            margin-bottom: 1.1rem;
+        }
+        .modal-user-preview strong { display: block; margin-bottom: .2rem; }
+        .modal-user-preview span { font-size: .83rem; color: var(--text-muted); }
+        .modal-label {
+            font-size: .82rem; font-weight: 600; margin-bottom: .35rem;
+            display: block;
+        }
+        .modal-select {
+            width: 100%; padding: .65rem .85rem;
+            border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-size: .9rem; color: var(--text); background: #fff;
+            -webkit-appearance: none; cursor: pointer; min-height: 42px;
+        }
+        .modal-select:focus { outline: none; border-color: var(--primary); }
+        .modal-hint {
+            font-size: .78rem; color: var(--text-muted); margin-top: .4rem;
+        }
+
+        /* Profile card */
+        .profile-wrap {
+            max-width: 560px;
+        }
+        .profile-card {
+            background: #fff; border-radius: var(--radius);
+            box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden;
+        }
+        .profile-cover {
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+        }
+        .profile-info { padding: 0 1.5rem 1.5rem; }
+        .profile-avatar {
+            width: 64px; height: 64px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border: 3px solid #fff; margin-top: -32px; margin-bottom: .75rem;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; color: #fff; font-weight: 700;
+        }
+        .profile-name { font-size: 1.15rem; font-weight: 700; margin-bottom: .15rem; }
+        .profile-role { margin-bottom: 1.1rem; }
+        .profile-fields { display: grid; gap: .6rem; }
+        .profile-field {
+            display: flex; gap: .75rem; align-items: flex-start;
+            font-size: .875rem;
+        }
+        .profile-field-label {
+            width: 110px; flex-shrink: 0;
+            font-size: .78rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: .04em;
+            color: var(--text-muted); padding-top: .05rem;
+        }
+        .profile-field-val { color: var(--text); font-weight: 500; }
+
+        /* Toast */
+        #toast {
+            position: fixed; bottom: 1.5rem; right: 1.5rem;
+            background: #1f2937; color: #fff;
+            padding: .75rem 1.25rem; border-radius: var(--radius-sm);
+            font-size: .875rem; font-weight: 500;
+            box-shadow: 0 8px 24px rgba(0,0,0,.2);
+            transform: translateY(calc(100% + 2rem));
+            transition: transform .25s; z-index: 9999;
+        }
+        #toast.show { transform: translateY(0); }
+        #toast.ok  { background: #065f46; }
+        #toast.err { background: #991b1b; }
+
+        /* Spinner */
+        .spin {
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.35);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin .7s linear infinite; flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .cards-grid { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-    <div id="loginContainer" class="login-container">
-        <div class="login-box">
-            <div class="login-header">
-                <h1>🔐 NAC System</h1>
-                <p>Network Access Control</p>
-            </div>
-            <form id="loginForm" onsubmit="handleLogin(event)">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <button type="submit" class="btn btn-primary btn-block">Login</button>
-            </form>
-            <div id="loginError" class="error-message" style="display:none;"></div>
+
+<!-- ── LOGIN ── -->
+<div id="loginContainer">
+    <div class="login-box">
+        <div class="login-header">
+            <div class="login-icon">🔐</div>
+            <h1>Panel Administrativo</h1>
+            <p>Control de Acceso WiFi</p>
         </div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="loginUser">Usuario</label>
+                <input type="text" id="loginUser" name="username" required
+                       autocomplete="username" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label for="loginPass">Contraseña</label>
+                <input type="password" id="loginPass" name="password" required
+                       autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Ingresar</button>
+        </form>
+        <div id="loginError" class="error-msg"></div>
     </div>
+</div>
 
-    <div id="appContainer" style="display:none;" class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>🎯 NAC</h2>
-                <p id="userDisplay" class="user-display">Admin</p>
+<!-- ── APP ── -->
+<div id="appContainer">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <div class="sidebar-logo-icon">📶</div>
+                <span>NAC WiFi</span>
             </div>
-            <nav class="sidebar-nav">
-                <button onclick="navigateTo('dashboard')" class="nav-item active" data-page="dashboard">
-                    <span class="icon">📊</span> Dashboard
-                </button>
-                <button onclick="navigateTo('users')" class="nav-item" data-page="users">
-                    <span class="icon">👥</span> Users
-                </button>
-                <button onclick="navigateTo('devices')" class="nav-item" data-page="devices">
-                    <span class="icon">📱</span> Devices
-                </button>
-                <button id="pendingUsersNav" onclick="navigateTo('pendingUsers')" class="nav-item" data-page="pendingUsers" style="display:none;">
-                    <span class="icon">⏳</span> Pending <span id="pendingBadge" style="background:#ef4444;color:white;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:0.8rem;">0</span>
-                </button>
-                <button onclick="navigateTo('profile')" class="nav-item" data-page="profile">
-                    <span class="icon">⚙️</span> Profile
-                </button>
-            </nav>
-            <div class="sidebar-footer">
-                <button onclick="handleLogout()" class="btn btn-danger btn-block">Logout</button>
+            <div class="sidebar-user">
+                <span class="sidebar-user-dot"></span>
+                <span id="sidebarUser">Admin</span>
             </div>
-        </aside>
+        </div>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Dashboard Page -->
-            <div id="dashboardPage" class="page active">
-                <div class="page-header">
-                    <h1>📊 Dashboard</h1>
-                    <p>System Overview</p>
+        <nav class="sidebar-nav">
+            <button onclick="navigateTo('dashboard')" class="nav-item active" data-page="dashboard">
+                <span class="nav-icon">📊</span> Dashboard
+            </button>
+            <button onclick="navigateTo('pendingUsers')" class="nav-item" data-page="pendingUsers" id="navPending" style="display:none">
+                <span class="nav-icon">⏳</span> Solicitudes
+                <span class="nav-badge" id="pendingBadge" style="display:none">0</span>
+            </button>
+            <button onclick="navigateTo('users')" class="nav-item" data-page="users">
+                <span class="nav-icon">👥</span> Usuarios
+            </button>
+            <button onclick="navigateTo('devices')" class="nav-item" data-page="devices">
+                <span class="nav-icon">📱</span> Dispositivos
+            </button>
+            <button onclick="navigateTo('profile')" class="nav-item" data-page="profile">
+                <span class="nav-icon">⚙️</span> Mi perfil
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button onclick="handleLogout()" class="btn-logout">↩ Cerrar sesión</button>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+
+        <!-- DASHBOARD -->
+        <div id="dashboardPage" class="page active">
+            <div class="page-header">
+                <div>
+                    <h1>Dashboard</h1>
+                    <p>Resumen del sistema</p>
                 </div>
+                <button class="btn btn-primary btn-sm" onclick="refreshDashboard()">🔄 Actualizar</button>
+            </div>
 
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon">👥</div>
-                        <div class="stat-content">
-                            <div class="stat-value" id="totalUsers">0</div>
-                            <div class="stat-label">Total Users</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">📱</div>
-                        <div class="stat-content">
-                            <div class="stat-value" id="totalDevices">0</div>
-                            <div class="stat-label">Total Devices</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🟢</div>
-                        <div class="stat-content">
-                            <div class="stat-value" id="activeDevices">0</div>
-                            <div class="stat-label">Active Devices</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🟡</div>
-                        <div class="stat-content">
-                            <div class="stat-value" id="inactiveDevices">0</div>
-                            <div class="stat-label">Inactive Devices</div>
-                        </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon purple">👥</div>
+                    <div>
+                        <div class="stat-value" id="statTotal">—</div>
+                        <div class="stat-label">Usuarios totales</div>
                     </div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-icon yellow">⏳</div>
+                    <div>
+                        <div class="stat-value" id="statPending">—</div>
+                        <div class="stat-label">Pendientes</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">✅</div>
+                    <div>
+                        <div class="stat-value" id="statApproved">—</div>
+                        <div class="stat-label">Aprobados</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon blue">📱</div>
+                    <div>
+                        <div class="stat-value" id="statDevices">—</div>
+                        <div class="stat-label">Dispositivos</div>
+                    </div>
+                </div>
+            </div>
 
-                <div class="recent-section">
-                    <h2>Recent Users</h2>
-                    <table class="data-table">
+            <div class="section-card">
+                <div class="section-card-header">
+                    Usuarios recientes
+                    <button class="btn btn-ghost btn-sm" onclick="navigateTo('users')">Ver todos →</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
                         <thead>
                             <tr>
-                                <th>Username</th>
-                                <th>Full Name</th>
-                                <th>Department</th>
-                                <th>Devices</th>
-                                <th>Actions</th>
+                                <th>Usuario</th>
+                                <th>Nombre</th>
+                                <th>Departamento</th>
+                                <th>Estado</th>
+                                <th>Registrado</th>
                             </tr>
                         </thead>
-                        <tbody id="recentUsers">
-                            <tr><td colspan="5">Loading...</td></tr>
+                        <tbody id="recentUsersTable">
+                            <tr class="empty-row"><td colspan="5">Cargando…</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+        </div>
 
-            <!-- Users Page -->
-            <div id="usersPage" class="page">
-                <div class="page-header">
-                    <h1>👥 Users Management</h1>
-                    <button onclick="openUserModal()" class="btn btn-success">+ New User</button>
+        <!-- SOLICITUDES PENDIENTES -->
+        <div id="pendingUsersPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Solicitudes pendientes</h1>
+                    <p>Usuarios registrados que esperan aprobación</p>
                 </div>
-
-                <div class="search-bar">
-                    <input type="text" id="userSearch" placeholder="Search users..." onkeyup="filterUsers()">
-                </div>
-
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Username</th>
-                            <th>Full Name</th>
-                            <th>Email</th>
-                            <th>Phone</th>
-                            <th>Department</th>
-                            <th>Devices</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="usersTable">
-                        <tr><td colspan="7">Loading...</td></tr>
-                    </tbody>
-                </table>
+                <button class="btn btn-primary btn-sm" onclick="loadPendingUsers()">🔄 Actualizar</button>
             </div>
-
-            <!-- Devices Page -->
-            <div id="devicesPage" class="page">
-                <div class="page-header">
-                    <h1>📱 Devices Management</h1>
-                    <button onclick="openDeviceModal()" class="btn btn-success">+ Register Device</button>
-                </div>
-
-                <div class="search-bar">
-                    <input type="text" id="deviceSearch" placeholder="Search by MAC, hostname..." onkeyup="filterDevices()">
-                </div>
-
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Hostname</th>
-                            <th>MAC Address</th>
-                            <th>Owner</th>
-                            <th>Type</th>
-                            <th>Manufacturer</th>
-                            <th>Model</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="devicesTable">
-                        <tr><td colspan="8">Loading...</td></tr>
-                    </tbody>
-                </table>
+            <div id="pendingCards">
+                <div style="padding:2rem;text-align:center;color:var(--text-muted)">Cargando…</div>
             </div>
+        </div>
 
-            <!-- Profile Page -->
-            <div id="profilePage" class="page">
-                <div class="page-header">
-                    <h1>⚙️ My Profile</h1>
-                </div>
-                <div id="profileContent" class="profile-card">
-                    <p>Loading profile...</p>
+        <!-- USUARIOS -->
+        <div id="usersPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Usuarios</h1>
+                    <p>Gestión de cuentas de acceso</p>
                 </div>
             </div>
-
-            <!-- Pending Users Page (Admin Only) -->
-            <div id="pendingUsersPage" class="page">
-                <div class="page-header">
-                    <h1>⏳ Pending User Approvals</h1>
+            <div class="section-card">
+                <div class="search-wrap">
+                    <input type="text" id="userSearch" placeholder="🔍  Buscar por usuario, nombre o correo…" oninput="filterUsers()">
                 </div>
-
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Username</th>
-                            <th>Full Name</th>
-                            <th>Email</th>
-                            <th>Phone</th>
-                            <th>Registered</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pendingUsersTable">
-                        <tr><td colspan="6">Loading...</td></tr>
-                    </tbody>
-                </table>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Nombre</th>
+                                <th>Departamento</th>
+                                <th>Cargo</th>
+                                <th>Correo</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable">
+                            <tr class="empty-row"><td colspan="7">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </main>
-    </div>
+        </div>
 
-    <!-- Modals -->
-    <div id="userModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Add New User</h2>
-                <button onclick="closeModal('userModal')" class="modal-close">&times;</button>
+        <!-- DISPOSITIVOS -->
+        <div id="devicesPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Dispositivos</h1>
+                    <p>Equipos registrados en la red</p>
+                </div>
             </div>
-            <form id="userForm" onsubmit="handleCreateUser(event)">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Username</label>
-                        <input type="text" id="formUsername" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="formPassword" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Full Name</label>
-                        <input type="text" id="formFullName" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="formEmail">
-                    </div>
-                    <div class="form-group">
-                        <label>Phone</label>
-                        <input type="text" id="formPhone">
-                    </div>
-                    <div class="form-group">
-                        <label>Department</label>
-                        <input type="text" id="formDepartment">
-                    </div>
-                    <div class="form-group">
-                        <label>Position</label>
-                        <input type="text" id="formPosition">
-                    </div>
-                    <div class="form-group">
-                        <label>Company</label>
-                        <input type="text" id="formCompany">
+            <div class="section-card">
+                <div class="search-wrap">
+                    <input type="text" id="deviceSearch" placeholder="🔍  Buscar por MAC, hostname…" oninput="filterDevices()">
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Propietario</th>
+                                <th>Dirección MAC</th>
+                                <th>IP</th>
+                                <th>Tipo</th>
+                                <th>Sistema</th>
+                                <th>Registrado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="devicesTable">
+                            <tr class="empty-row"><td colspan="6">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERFIL -->
+        <div id="profilePage" class="page">
+            <div class="page-header">
+                <h1>Mi perfil</h1>
+            </div>
+            <div class="profile-wrap">
+                <div class="profile-card" id="profileCard">
+                    <div class="profile-cover"></div>
+                    <div class="profile-info">
+                        <div class="profile-avatar" id="profileAvatar">?</div>
+                        <div class="profile-name" id="profileName">—</div>
+                        <div class="profile-role" id="profileRole"></div>
+                        <div class="profile-fields" id="profileFields"></div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" onclick="closeModal('userModal')" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create User</button>
-                </div>
-            </form>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ── MODAL APROBAR ── -->
+<div class="modal-overlay" id="approveModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Aprobar acceso</h3>
+            <button class="modal-close" onclick="closeApproveModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-user-preview">
+                <strong id="approveUserName">—</strong>
+                <span id="approveUserMeta">—</span>
+            </div>
+            <label class="modal-label" for="approveHours">Duración del acceso</label>
+            <select class="modal-select" id="approveHours">
+                <option value="">Sin límite (acceso permanente)</option>
+                <option value="4">4 horas</option>
+                <option value="8">8 horas</option>
+                <option value="24">1 día</option>
+                <option value="48">2 días</option>
+                <option value="168">1 semana</option>
+            </select>
+            <p class="modal-hint" id="approveHint"></p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeApproveModal()">Cancelar</button>
+            <button class="btn btn-success" id="approveConfirmBtn" onclick="confirmApprove()">✓ Confirmar aprobación</button>
         </div>
     </div>
+</div>
 
-    <div id="deviceModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Register Device</h2>
-                <button onclick="closeModal('deviceModal')" class="modal-close">&times;</button>
-            </div>
-            <form id="deviceForm" onsubmit="handleCreateDevice(event)">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>User ID</label>
-                        <input type="number" id="formDeviceUserId" required>
-                    </div>
-                    <div class="form-group">
-                        <label>MAC Address</label>
-                        <input type="text" id="formMac" placeholder="AA:BB:CC:DD:EE:FF" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Hostname</label>
-                        <input type="text" id="formHostname" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Device Type</label>
-                        <select id="formDeviceType">
-                            <option value="laptop">Laptop</option>
-                            <option value="smartphone">Smartphone</option>
-                            <option value="tablet">Tablet</option>
-                            <option value="desktop">Desktop</option>
-                            <option value="printer">Printer</option>
-                            <option value="router">Router</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Manufacturer</label>
-                        <input type="text" id="formManufacturer">
-                    </div>
-                    <div class="form-group">
-                        <label>Model</label>
-                        <input type="text" id="formModel">
-                    </div>
-                    <div class="form-group">
-                        <label>OS Type</label>
-                        <input type="text" id="formOsType" placeholder="Windows, macOS, Linux, etc">
-                    </div>
-                    <div class="form-group">
-                        <label>OS Version</label>
-                        <input type="text" id="formOsVersion">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" onclick="closeModal('deviceModal')" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Register Device</button>
-                </div>
-            </form>
-        </div>
-    </div>
+<!-- Toast -->
+<div id="toast"></div>
 
-    <script src="/static/app.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>

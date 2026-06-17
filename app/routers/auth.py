@@ -162,6 +162,8 @@ class RegisterRequest(BaseModel):
     department: Optional[str] = None
     position: Optional[str] = None
     company: Optional[str] = None
+    ticket_number: Optional[str] = None
+    access_duration_hours: Optional[int] = None
     mac_address: Optional[str] = None
     ip_address: Optional[str] = None
     device_info: Optional[str] = None
@@ -173,8 +175,22 @@ class PendingUserResponse(BaseModel):
     full_name: str
     email: Optional[str]
     phone: Optional[str]
+    department: Optional[str]
+    position: Optional[str]
+    ticket_number: Optional[str]
+    access_duration_hours: Optional[int]
     approval_status: str
     created_at: str
+    # desde devices
+    mac_address: Optional[str] = None
+    ip_address: Optional[str] = None
+    device_type: Optional[str] = None
+    os_type: Optional[str] = None
+    os_version: Optional[str] = None
+
+
+class ApproveRequest(BaseModel):
+    access_hours: Optional[int] = None  # None = acceso ilimitado
 
 
 @router.post("/register", response_model=UserResponse)
@@ -242,10 +258,12 @@ async def register(request: RegisterRequest):
     await db.execute(
         """INSERT INTO users
            (username, full_name, email, phone, department, position, company,
+            ticket_number, access_duration_hours,
             password_hash, role, is_active, approval_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (request.username, request.full_name, request.email, request.phone,
          request.department, request.position, request.company,
+         request.ticket_number, request.access_duration_hours,
          password_hash, "user", 0, "pending")
     )
     await db.commit()
@@ -315,71 +333,77 @@ async def get_pending_users(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     cursor = await db.execute(
-        "SELECT id, username, full_name, email, phone, approval_status, created_at FROM users WHERE approval_status = 'pending' ORDER BY created_at DESC"
+        """SELECT u.id, u.username, u.full_name, u.email, u.phone,
+                  u.department, u.position, u.ticket_number, u.access_duration_hours,
+                  u.approval_status, u.created_at,
+                  d.mac_address, d.ip_address, d.device_type, d.os_type, d.os_version
+           FROM users u
+           LEFT JOIN devices d ON d.user_id = u.id
+           WHERE u.approval_status = 'pending'
+           ORDER BY u.created_at DESC"""
     )
     pending = await cursor.fetchall()
     await db.close()
 
     return [
         PendingUserResponse(
-            id=p[0],
-            username=p[1],
-            full_name=p[2],
-            email=p[3],
-            phone=p[4],
-            approval_status=p[5],
-            created_at=str(p[6])
+            id=p[0], username=p[1], full_name=p[2], email=p[3], phone=p[4],
+            department=p[5], position=p[6], ticket_number=p[7],
+            access_duration_hours=p[8], approval_status=p[9], created_at=str(p[10]),
+            mac_address=p[11], ip_address=p[12], device_type=p[13],
+            os_type=p[14], os_version=p[15]
         ) for p in pending
     ]
 
 
 @router.post("/approve-user/{user_id}")
-async def approve_user(user_id: int, authorization: Optional[str] = Header(None)):
-    """Approve a pending user (admin only)."""
+async def approve_user(
+    user_id: int,
+    body: ApproveRequest = ApproveRequest(),
+    authorization: Optional[str] = Header(None)
+):
+    """Approve a pending user (admin only). access_hours=None → acceso ilimitado."""
+    from datetime import datetime, timedelta
+
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     token = authorization.split(" ")[1]
     payload = decode_token(token)
-
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     username = payload.get("sub")
     db = await get_db()
 
-    cursor = await db.execute(
-        "SELECT role FROM users WHERE username = ?",
-        (username,)
-    )
-    user = await cursor.fetchone()
-
-    if not user or user[0] != "admin":
+    cursor = await db.execute("SELECT role FROM users WHERE username = ?", (username,))
+    admin = await cursor.fetchone()
+    if not admin or admin[0] != "admin":
         await db.close()
         raise HTTPException(status_code=403, detail="Admin access required")
 
+    # Calcular expiración si se indica duración
+    expires_at = None
+    if body.access_hours:
+        expires_at = (datetime.utcnow() + timedelta(hours=body.access_hours)).isoformat()
+
     await db.execute(
-        "UPDATE users SET approval_status = 'approved', is_active = 1 WHERE id = ?",
-        (user_id,)
+        """UPDATE users
+           SET approval_status = 'approved', is_active = 1,
+               access_expires_at = ?
+           WHERE id = ?""",
+        (expires_at, user_id)
     )
     await db.commit()
 
-    # Get user's devices to whitelist them
-    cursor = await db.execute(
-        "SELECT username FROM users WHERE id = ?",
-        (user_id,)
-    )
-    user_info = await cursor.fetchone()
-    user_username = user_info[0] if user_info else "unknown"
+    cursor = await db.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+    row = await cursor.fetchone()
+    user_username = row[0] if row else "unknown"
 
-    cursor = await db.execute(
-        "SELECT mac_address FROM devices WHERE user_id = ?",
-        (user_id,)
-    )
+    cursor = await db.execute("SELECT mac_address FROM devices WHERE user_id = ?", (user_id,))
     devices = await cursor.fetchall()
     await db.close()
 
-    # Add devices to router whitelist (async, don't block)
     if devices:
         try:
             from app.services.mikrotik_client import MikroTikClient
@@ -390,7 +414,7 @@ async def approve_user(user_id: int, authorization: Optional[str] = Header(None)
         except Exception as e:
             logger.warning(f"Could not sync MAC to router: {str(e)}")
 
-    return {"message": "User approved"}
+    return {"message": "User approved", "expires_at": expires_at}
 
 
 @router.post("/reject-user/{user_id}")

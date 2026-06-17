@@ -1,422 +1,452 @@
-// ============== STATE ==============
+// ── State ──
 let token = localStorage.getItem('token');
 let currentUser = null;
 let allUsers = [];
 let allDevices = [];
+let pendingApproveId = null;
 
-// ============== API BASE ==============
-const API_BASE = window.location.origin + '/api';
+const API = window.location.origin + '/api';
 
-// ============== INITIALIZATION ==============
+// ── Boot ──
 document.addEventListener('DOMContentLoaded', () => {
-    if (token) {
-        showApp();
-        loadDashboard();
-    } else {
-        showLogin();
-    }
+    if (token) { showApp(); initApp(); }
+    else showLogin();
 });
 
-// ============== AUTH ==============
+// ── Auth ──
 async function handleLogin(e) {
     e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
+    const username = document.getElementById('loginUser').value.trim();
+    const password = document.getElementById('loginPass').value;
+    const btn = document.getElementById('loginBtn');
+    const err = document.getElementById('loginError');
+    err.classList.remove('show');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> Ingresando…';
 
     try {
-        const response = await fetch(`${API_BASE}/auth/login`, {
+        const res = await fetch(`${API}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
         });
-
-        const data = await response.json();
-
-        if (response.ok) {
+        const data = await res.json();
+        if (res.ok) {
             token = data.access_token;
             localStorage.setItem('token', token);
             showApp();
-            loadDashboard();
+            initApp();
         } else {
-            showError(data.detail || 'Login failed');
+            const map = {
+                'Invalid credentials':          'Usuario o contraseña incorrectos.',
+                'User is inactive':             'Esta cuenta está inactiva.',
+                'User account pending approval':'Tu cuenta está pendiente de aprobación.'
+            };
+            err.textContent = map[data.detail] || data.detail || 'Error al iniciar sesión.';
+            err.classList.add('show');
         }
-    } catch (error) {
-        showError('Network error');
+    } catch {
+        err.textContent = 'Error de red. Verifica tu conexión.';
+        err.classList.add('show');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Ingresar';
     }
 }
 
 function handleLogout() {
     token = null;
+    currentUser = null;
     localStorage.removeItem('token');
     showLogin();
     document.getElementById('loginForm').reset();
+    document.getElementById('loginError').classList.remove('show');
 }
 
-// ============== UI NAVIGATION ==============
+// ── UI helpers ──
 function showLogin() {
     document.getElementById('loginContainer').style.display = 'flex';
     document.getElementById('appContainer').style.display = 'none';
 }
-
 function showApp() {
     document.getElementById('loginContainer').style.display = 'none';
     document.getElementById('appContainer').style.display = 'flex';
 }
 
 function navigateTo(page) {
-    // Hide all pages
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-
-    // Update nav
-    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
-
-    // Show page
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.getElementById(page + 'Page').classList.add('active');
+    const navEl = document.querySelector(`[data-page="${page}"]`);
+    if (navEl) navEl.classList.add('active');
 
-    // Load data
-    if (page === 'dashboard') loadDashboard();
-    if (page === 'users') loadUsers();
-    if (page === 'devices') loadDevices();
-    if (page === 'profile') loadProfile();
+    if (page === 'dashboard')    loadDashboard();
     if (page === 'pendingUsers') loadPendingUsers();
+    if (page === 'users')        loadUsers();
+    if (page === 'devices')      loadDevices();
+    if (page === 'profile')      loadProfile();
 }
 
-// ============== DASHBOARD ==============
+function toast(msg, type = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show ' + type;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.className = ''; }, 3000);
+}
+
+function fmtDate(dt) {
+    if (!dt) return '—';
+    try { return new Date(dt).toLocaleDateString('es', { day:'2-digit', month:'short', year:'numeric' }); }
+    catch { return dt; }
+}
+function fmtDateTime(dt) {
+    if (!dt) return '—';
+    try { return new Date(dt).toLocaleString('es', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }); }
+    catch { return dt; }
+}
+function durationLabel(hours) {
+    if (!hours) return null;
+    if (hours < 24) return hours + ' horas';
+    if (hours === 24) return '1 día';
+    if (hours === 48) return '2 días';
+    if (hours === 168) return '1 semana';
+    return hours + ' horas';
+}
+
+// ── Init (load profile + badges) ──
+async function initApp() {
+    try {
+        currentUser = await fetchAPI(`${API}/auth/me`);
+        if (!currentUser) return handleLogout();
+
+        document.getElementById('sidebarUser').textContent = currentUser.username;
+
+        if (currentUser.role === 'admin') {
+            document.getElementById('navPending').style.display = 'flex';
+            refreshPendingBadge();
+        }
+        loadDashboard();
+    } catch {
+        handleLogout();
+    }
+}
+
+async function refreshPendingBadge() {
+    try {
+        const list = await fetchAPI(`${API}/auth/pending-users`) || [];
+        const badge = document.getElementById('pendingBadge');
+        badge.textContent = list.length;
+        badge.style.display = list.length > 0 ? 'inline-flex' : 'none';
+    } catch { /* silent */ }
+}
+
+// ── Dashboard ──
 async function loadDashboard() {
     try {
-        const [usersRes, devicesRes] = await Promise.all([
-            fetchAPI(`${API_BASE}/users/`),
-            fetchAPI(`${API_BASE}/devices/`)
+        const [users, devices] = await Promise.all([
+            fetchAPI(`${API}/users/`).catch(() => []),
+            fetchAPI(`${API}/devices/`).catch(() => [])
         ]);
 
-        const users = usersRes || [];
-        const devices = devicesRes || [];
+        const total    = (users || []).length;
+        const pending  = (users || []).filter(u => u.approval_status === 'pending').length;
+        const approved = (users || []).filter(u => u.approval_status === 'approved').length;
 
-        const activeDevices = devices.filter(d => d.status === 'online').length;
-        const inactiveDevices = devices.filter(d => d.status !== 'online').length;
+        document.getElementById('statTotal').textContent   = total;
+        document.getElementById('statPending').textContent  = pending;
+        document.getElementById('statApproved').textContent = approved;
+        document.getElementById('statDevices').textContent  = (devices || []).length;
 
-        document.getElementById('totalUsers').textContent = users.length;
-        document.getElementById('totalDevices').textContent = devices.length;
-        document.getElementById('activeDevices').textContent = activeDevices;
-        document.getElementById('inactiveDevices').textContent = inactiveDevices;
-
-        // Show recent users
-        const recentUsers = users.slice(0, 5);
-        document.getElementById('recentUsers').innerHTML = recentUsers.map(user => `
-            <tr>
-                <td>${user.username}</td>
-                <td>${user.full_name}</td>
-                <td>${user.department || '-'}</td>
-                <td>${devices.filter(d => d.user_id === user.id).length}</td>
-                <td><button class="btn btn-primary" onclick="openUserDetail(${user.id})">View</button></td>
-            </tr>
-        `).join('');
-    } catch (error) {
-        console.error('Dashboard load error:', error);
+        const recent = (users || []).slice(0, 6);
+        document.getElementById('recentUsersTable').innerHTML = recent.length === 0
+            ? '<tr class="empty-row"><td colspan="5">Sin usuarios</td></tr>'
+            : recent.map(u => `
+                <tr>
+                    <td><strong>${u.username}</strong></td>
+                    <td>${u.full_name}</td>
+                    <td>${u.department || '—'}</td>
+                    <td>${statusBadge(u.approval_status)}</td>
+                    <td>${fmtDate(u.created_at)}</td>
+                </tr>`).join('');
+    } catch (e) {
+        console.error('Dashboard error', e);
     }
 }
 
-// ============== USERS ==============
-async function loadUsers() {
-    try {
-        allUsers = await fetchAPI(`${API_BASE}/users/`) || [];
-        displayUsers(allUsers);
-    } catch (error) {
-        console.error('Users load error:', error);
-    }
-}
+function refreshDashboard() { loadDashboard(); }
 
-function displayUsers(users) {
-    document.getElementById('usersTable').innerHTML = users.map(user => `
-        <tr>
-            <td>${user.username}</td>
-            <td>${user.full_name}</td>
-            <td>${user.email || '-'}</td>
-            <td>${user.phone || '-'}</td>
-            <td>${user.department || '-'}</td>
-            <td><button class="btn btn-primary" onclick="openUserDetail(${user.id})">View Devices</button></td>
-            <td>
-                <button class="btn btn-danger" onclick="deleteUser(${user.id})">Delete</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-function filterUsers() {
-    const query = document.getElementById('userSearch').value.toLowerCase();
-    const filtered = allUsers.filter(u =>
-        u.username.toLowerCase().includes(query) ||
-        u.full_name.toLowerCase().includes(query) ||
-        (u.email && u.email.toLowerCase().includes(query))
-    );
-    displayUsers(filtered);
-}
-
-function openUserModal() {
-    document.getElementById('userForm').reset();
-    document.getElementById('userModal').classList.add('active');
-}
-
-async function handleCreateUser(e) {
-    e.preventDefault();
-
-    const userData = {
-        username: document.getElementById('formUsername').value,
-        password: document.getElementById('formPassword').value,
-        full_name: document.getElementById('formFullName').value,
-        email: document.getElementById('formEmail').value,
-        phone: document.getElementById('formPhone').value,
-        department: document.getElementById('formDepartment').value,
-        position: document.getElementById('formPosition').value,
-        company: document.getElementById('formCompany').value
-    };
-
-    try {
-        await fetchAPI(`${API_BASE}/users/`, {
-            method: 'POST',
-            body: JSON.stringify(userData)
-        });
-
-        closeModal('userModal');
-        loadUsers();
-        alert('User created successfully!');
-    } catch (error) {
-        alert('Error creating user');
-    }
-}
-
-async function deleteUser(userId) {
-    if (!confirm('Delete this user and all devices?')) return;
-
-    try {
-        await fetchAPI(`${API_BASE}/users/${userId}`, { method: 'DELETE' });
-        loadUsers();
-        alert('User deleted successfully!');
-    } catch (error) {
-        alert('Error deleting user');
-    }
-}
-
-async function openUserDetail(userId) {
-    try {
-        const user = await fetchAPI(`${API_BASE}/users/${userId}`);
-        if (user) {
-            alert(`${user.full_name}\n\nDepartment: ${user.department}\nDevices: ${user.device_count}\n\nEmail: ${user.email}\nPhone: ${user.phone}`);
-        }
-    } catch (error) {
-        alert('Error loading user details');
-    }
-}
-
-// ============== DEVICES ==============
-async function loadDevices() {
-    try {
-        allDevices = await fetchAPI(`${API_BASE}/devices/`) || [];
-        displayDevices(allDevices);
-    } catch (error) {
-        console.error('Devices load error:', error);
-    }
-}
-
-function displayDevices(devices) {
-    document.getElementById('devicesTable').innerHTML = devices.map(device => `
-        <tr>
-            <td>${device.hostname}</td>
-            <td><code>${device.mac_address}</code></td>
-            <td>${device.user_id}</td>
-            <td>${device.device_type}</td>
-            <td>${device.manufacturer || '-'}</td>
-            <td>${device.model || '-'}</td>
-            <td><span class="${device.status === 'online' ? 'text-success' : 'text-danger'}">${device.status}</span></td>
-            <td>
-                <button class="btn btn-danger" onclick="deleteDevice(${device.id})">Delete</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-function filterDevices() {
-    const query = document.getElementById('deviceSearch').value.toLowerCase();
-    const filtered = allDevices.filter(d =>
-        d.mac_address.toLowerCase().includes(query) ||
-        d.hostname.toLowerCase().includes(query)
-    );
-    displayDevices(filtered);
-}
-
-function openDeviceModal() {
-    document.getElementById('deviceForm').reset();
-    document.getElementById('deviceModal').classList.add('active');
-}
-
-async function handleCreateDevice(e) {
-    e.preventDefault();
-
-    const deviceData = {
-        user_id: parseInt(document.getElementById('formDeviceUserId').value),
-        mac_address: document.getElementById('formMac').value,
-        hostname: document.getElementById('formHostname').value,
-        device_type: document.getElementById('formDeviceType').value,
-        manufacturer: document.getElementById('formManufacturer').value,
-        model: document.getElementById('formModel').value,
-        os_type: document.getElementById('formOsType').value,
-        os_version: document.getElementById('formOsVersion').value
-    };
-
-    try {
-        await fetchAPI(`${API_BASE}/devices/`, {
-            method: 'POST',
-            body: JSON.stringify(deviceData)
-        });
-
-        closeModal('deviceModal');
-        loadDevices();
-        alert('Device registered successfully!');
-    } catch (error) {
-        alert('Error registering device');
-    }
-}
-
-async function deleteDevice(deviceId) {
-    if (!confirm('Delete this device?')) return;
-
-    try {
-        await fetchAPI(`${API_BASE}/devices/${deviceId}`, { method: 'DELETE' });
-        loadDevices();
-        alert('Device deleted successfully!');
-    } catch (error) {
-        alert('Error deleting device');
-    }
-}
-
-// ============== PROFILE ==============
-async function loadProfile() {
-    try {
-        const user = await fetchAPI(`${API_BASE}/auth/me`);
-        if (user) {
-            document.getElementById('userDisplay').textContent = user.username;
-
-            // Show pending users section only for admins
-            if (user.role === 'admin') {
-                document.getElementById('pendingUsersNav').style.display = 'block';
-                loadPendingUsersBadge();
-            }
-
-            document.getElementById('profileContent').innerHTML = `
-                <h2>${user.full_name}</h2>
-                <p><strong>Username:</strong> ${user.username}</p>
-                <p><strong>Email:</strong> ${user.email || 'Not set'}</p>
-                <p><strong>Phone:</strong> ${user.phone || 'Not set'}</p>
-                <p><strong>Department:</strong> ${user.department || 'Not set'}</p>
-                <p><strong>Position:</strong> ${user.position || 'Not set'}</p>
-                <p><strong>Company:</strong> ${user.company || 'Not set'}</p>
-                <p><strong>Role:</strong> <strong class="text-success">${user.role}</strong></p>
-            `;
-        }
-    } catch (error) {
-        console.error('Profile load error:', error);
-    }
-}
-
-// ============== PENDING USERS (ADMIN) ==============
-async function loadPendingUsersBadge() {
-    try {
-        const pending = await fetchAPI(`${API_BASE}/auth/pending-users`) || [];
-        document.getElementById('pendingBadge').textContent = pending.length;
-    } catch (error) {
-        console.error('Pending users badge error:', error);
-    }
-}
-
+// ── Pending users (cards) ──
 async function loadPendingUsers() {
+    const container = document.getElementById('pendingCards');
+    container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted)">Cargando…</div>';
+
     try {
-        const pending = await fetchAPI(`${API_BASE}/auth/pending-users`) || [];
-        displayPendingUsers(pending);
-    } catch (error) {
-        console.error('Pending users load error:', error);
+        const list = await fetchAPI(`${API}/auth/pending-users`) || [];
+
+        if (list.length === 0) {
+            container.innerHTML = `
+                <div style="padding:3rem;text-align:center;color:var(--text-muted)">
+                    <div style="font-size:2.5rem;margin-bottom:.75rem">🎉</div>
+                    <strong>Sin solicitudes pendientes</strong>
+                    <p style="margin-top:.35rem;font-size:.875rem">Todas las solicitudes han sido procesadas.</p>
+                </div>`;
+            refreshPendingBadge();
+            return;
+        }
+
+        container.innerHTML = '<div class="cards-grid">' +
+            list.map(u => buildPendingCard(u)).join('') +
+        '</div>';
+
+        refreshPendingBadge();
+    } catch (e) {
+        container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--danger)">Error al cargar solicitudes.</div>';
     }
 }
 
-function displayPendingUsers(users) {
-    document.getElementById('pendingUsersTable').innerHTML = users.length === 0
-        ? '<tr><td colspan="6" style="text-align:center;padding:2rem;">No pending users</td></tr>'
-        : users.map(user => `
-            <tr>
-                <td><strong>${user.username}</strong></td>
-                <td>${user.full_name}</td>
-                <td>${user.email || '-'}</td>
-                <td>${user.phone || '-'}</td>
-                <td>${new Date(user.created_at).toLocaleDateString()}</td>
-                <td>
-                    <button class="btn btn-success" style="padding:0.5rem 1rem;font-size:0.85rem;margin-right:0.5rem;" onclick="approveUser(${user.id})">✓ Approve</button>
-                    <button class="btn btn-danger" style="padding:0.5rem 1rem;font-size:0.85rem;" onclick="rejectUser(${user.id})">✗ Reject</button>
-                </td>
-            </tr>
-        `).join('');
+function buildPendingCard(u) {
+    const isVisitor  = u.department === 'Visita / Externo';
+    const ticketHtml = (isVisitor && u.ticket_number) ? `
+        <div class="card-ticket">
+            🎫 Ticket: <strong>${u.ticket_number}</strong>
+            ${u.access_duration_hours ? `· ${durationLabel(u.access_duration_hours)}` : ''}
+        </div>` : '';
+
+    const deviceHtml = (u.mac_address || u.ip_address || u.device_type) ? `
+        <div class="card-device">
+            ${u.device_type ? `<div class="card-device-row">💻 <span>${u.device_type}${u.os_type ? ' · ' + u.os_type : ''}${u.os_version ? ' ' + u.os_version : ''}</span></div>` : ''}
+            ${u.mac_address ? `<div class="card-device-row">🔑 <span class="mono" style="font-family:monospace;font-size:.79rem">${u.mac_address}</span></div>` : ''}
+            ${u.ip_address  ? `<div class="card-device-row">📍 <span>${u.ip_address}</span></div>` : ''}
+        </div>` : '';
+
+    const durationDefault = u.access_duration_hours || '';
+
+    return `
+    <div class="pending-card" id="card-${u.id}">
+        <div class="card-header-strip"></div>
+        <div class="card-body">
+            <div class="card-name">${escHtml(u.full_name)}</div>
+            <div class="card-username">@${escHtml(u.username)}</div>
+            <div class="card-meta">
+                <div class="card-meta-item">
+                    <span class="card-meta-label">Departamento</span>
+                    <span class="card-meta-value">${u.department || '—'}</span>
+                </div>
+                <div class="card-meta-item">
+                    <span class="card-meta-label">Cargo / Relación</span>
+                    <span class="card-meta-value">${u.position || '—'}</span>
+                </div>
+                ${u.email ? `<div class="card-meta-item">
+                    <span class="card-meta-label">Correo</span>
+                    <span class="card-meta-value">${escHtml(u.email)}</span>
+                </div>` : ''}
+                ${u.phone ? `<div class="card-meta-item">
+                    <span class="card-meta-label">Teléfono</span>
+                    <span class="card-meta-value">${escHtml(u.phone)}</span>
+                </div>` : ''}
+            </div>
+            ${ticketHtml}
+            ${deviceHtml}
+            <div class="card-date">📅 Registrado: ${fmtDateTime(u.created_at)}</div>
+        </div>
+        <div class="card-footer">
+            <button class="btn btn-danger btn-sm" onclick="rejectUser(${u.id})">✕ Rechazar</button>
+            <button class="btn btn-success btn-sm" onclick="openApproveModal(${u.id}, '${escAttr(u.full_name)}', '${escAttr(u.department || '')}', '${escAttr(u.position || '')}', ${durationDefault || 'null'})">
+                ✓ Aprobar
+            </button>
+        </div>
+    </div>`;
 }
 
-async function approveUser(userId) {
-    if (!confirm('Approve this user?')) return;
+// ── Approve modal ──
+function openApproveModal(id, name, dept, position, requestedHours) {
+    pendingApproveId = id;
+    document.getElementById('approveUserName').textContent = name;
+    document.getElementById('approveUserMeta').textContent =
+        [dept, position].filter(Boolean).join(' · ') || 'Sin información adicional';
+
+    const sel = document.getElementById('approveHours');
+    sel.value = requestedHours || '';
+
+    const hint = document.getElementById('approveHint');
+    if (requestedHours) {
+        hint.textContent = `El usuario solicitó ${durationLabel(requestedHours)}. Puedes modificarlo si lo deseas.`;
+    } else {
+        hint.textContent = 'Dejar en blanco para acceso permanente.';
+    }
+
+    document.getElementById('approveModal').classList.add('show');
+}
+
+function closeApproveModal() {
+    document.getElementById('approveModal').classList.remove('show');
+    pendingApproveId = null;
+}
+
+async function confirmApprove() {
+    if (!pendingApproveId) return;
+    const btn = document.getElementById('approveConfirmBtn');
+    const hours = document.getElementById('approveHours').value;
+    const body = hours ? { access_hours: parseInt(hours, 10) } : {};
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> Aprobando…';
 
     try {
-        await fetchAPI(`${API_BASE}/auth/approve-user/${userId}`, { method: 'POST' });
+        await fetchAPI(`${API}/auth/approve-user/${pendingApproveId}`, {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+        closeApproveModal();
+        toast('✅ Usuario aprobado correctamente.', 'ok');
         loadPendingUsers();
-        loadPendingUsersBadge();
-        alert('User approved!');
-    } catch (error) {
-        alert('Error approving user');
+    } catch (e) {
+        toast('❌ Error al aprobar. Intenta de nuevo.', 'err');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '✓ Confirmar aprobación';
     }
 }
 
 async function rejectUser(userId) {
-    if (!confirm('Reject this user?')) return;
-
+    if (!confirm('¿Rechazar esta solicitud? El usuario no podrá acceder a la red.')) return;
     try {
-        await fetchAPI(`${API_BASE}/auth/reject-user/${userId}`, { method: 'POST' });
+        await fetchAPI(`${API}/auth/reject-user/${userId}`, { method: 'POST' });
+        toast('Solicitud rechazada.', 'ok');
         loadPendingUsers();
-        loadPendingUsersBadge();
-        alert('User rejected!');
-    } catch (error) {
-        alert('Error rejecting user');
+    } catch {
+        toast('❌ Error al rechazar.', 'err');
     }
 }
 
-// ============== MODALS ==============
-function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('active');
+// ── Users table ──
+async function loadUsers() {
+    try {
+        allUsers = await fetchAPI(`${API}/users/`) || [];
+        renderUsers(allUsers);
+    } catch { /* silent */ }
 }
 
-document.querySelectorAll('.modal').forEach(modal => {
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.classList.remove('active');
+function renderUsers(list) {
+    document.getElementById('usersTable').innerHTML = list.length === 0
+        ? '<tr class="empty-row"><td colspan="7">Sin usuarios</td></tr>'
+        : list.map(u => `
+            <tr>
+                <td><strong>${escHtml(u.username)}</strong></td>
+                <td>${escHtml(u.full_name)}</td>
+                <td>${u.department || '—'}</td>
+                <td>${u.position || '—'}</td>
+                <td>${u.email || '—'}</td>
+                <td>${statusBadge(u.approval_status)}</td>
+                <td>
+                    ${u.approval_status === 'pending' && currentUser?.role === 'admin'
+                        ? `<button class="btn btn-success btn-sm" onclick="openApproveModal(${u.id},'${escAttr(u.full_name)}','${escAttr(u.department||'')}','${escAttr(u.position||'')}',${u.access_duration_hours||'null'})">Aprobar</button>`
+                        : ''}
+                </td>
+            </tr>`).join('');
+}
+
+function filterUsers() {
+    const q = document.getElementById('userSearch').value.toLowerCase();
+    renderUsers(allUsers.filter(u =>
+        u.username.toLowerCase().includes(q) ||
+        u.full_name.toLowerCase().includes(q) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.department && u.department.toLowerCase().includes(q))
+    ));
+}
+
+// ── Devices table ──
+async function loadDevices() {
+    try {
+        allDevices = await fetchAPI(`${API}/devices/`) || [];
+        renderDevices(allDevices);
+    } catch { /* silent */ }
+}
+
+function renderDevices(list) {
+    document.getElementById('devicesTable').innerHTML = list.length === 0
+        ? '<tr class="empty-row"><td colspan="6">Sin dispositivos</td></tr>'
+        : list.map(d => `
+            <tr>
+                <td>${d.hostname || '—'}</td>
+                <td><code style="font-family:monospace;font-size:.82rem">${d.mac_address}</code></td>
+                <td>${d.ip_address || '—'}</td>
+                <td>${d.device_type || '—'}</td>
+                <td>${[d.os_type, d.os_version].filter(Boolean).join(' ') || '—'}</td>
+                <td>${fmtDate(d.created_at)}</td>
+            </tr>`).join('');
+}
+
+function filterDevices() {
+    const q = document.getElementById('deviceSearch').value.toLowerCase();
+    renderDevices(allDevices.filter(d =>
+        d.mac_address.toLowerCase().includes(q) ||
+        (d.hostname && d.hostname.toLowerCase().includes(q)) ||
+        (d.ip_address && d.ip_address.toLowerCase().includes(q))
+    ));
+}
+
+// ── Profile ──
+async function loadProfile() {
+    try {
+        const u = await fetchAPI(`${API}/auth/me`);
+        if (!u) return;
+
+        const initials = u.full_name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+        document.getElementById('profileAvatar').textContent = initials;
+        document.getElementById('profileName').textContent = u.full_name;
+        document.getElementById('profileRole').innerHTML = u.role === 'admin'
+            ? '<span class="badge badge-admin">Administrador</span>'
+            : '<span class="badge badge-user">Usuario</span>';
+        document.getElementById('profileFields').innerHTML = [
+            ['Usuario',        u.username],
+            ['Correo',         u.email || '—'],
+            ['Rol',            u.role === 'admin' ? 'Administrador' : 'Usuario'],
+            ['Estado',         u.is_active ? 'Activo' : 'Inactivo'],
+        ].map(([label, val]) => `
+            <div class="profile-field">
+                <span class="profile-field-label">${label}</span>
+                <span class="profile-field-val">${escHtml(String(val))}</span>
+            </div>`).join('');
+    } catch { /* silent */ }
+}
+
+// ── Utilities ──
+function statusBadge(status) {
+    const map = {
+        pending:  ['badge-pending',  '⏳ Pendiente'],
+        approved: ['badge-approved', '✓ Aprobado'],
+        rejected: ['badge-rejected', '✕ Rechazado'],
+    };
+    const [cls, label] = map[status] || ['', status];
+    return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+    return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+}
+
+async function fetchAPI(url, options = {}) {
+    const res = await fetch(url, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            ...(options.headers || {})
         }
     });
+    if (res.status === 401) { handleLogout(); throw new Error('Unauthorized'); }
+    return res.json();
+}
+
+// Close approve modal on overlay click
+document.addEventListener('click', e => {
+    const overlay = document.getElementById('approveModal');
+    if (e.target === overlay) closeApproveModal();
 });
-
-// ============== UTILITIES ==============
-async function fetchAPI(url, options = {}) {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-    };
-
-    const response = await fetch(url, {
-        ...options,
-        headers: { ...headers, ...options.headers }
-    });
-
-    if (response.status === 401) {
-        handleLogout();
-        throw new Error('Unauthorized');
-    }
-
-    return response.json();
-}
-
-function showError(message) {
-    const errorEl = document.getElementById('loginError');
-    errorEl.textContent = message;
-    errorEl.style.display = 'block';
-}

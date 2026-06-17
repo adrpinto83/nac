@@ -26,6 +26,9 @@ async def init_db():
             department TEXT,
             position TEXT,
             company TEXT,
+            ticket_number TEXT,
+            access_duration_hours INTEGER,
+            access_expires_at TIMESTAMP,
             password_hash TEXT NOT NULL,
             role TEXT DEFAULT 'user',
             is_active BOOLEAN DEFAULT 1,
@@ -35,6 +38,19 @@ async def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Migración: agregar columnas si la tabla ya existe sin ellas
+    for col, defn in [
+        ('ticket_number', 'TEXT'),
+        ('access_duration_hours', 'INTEGER'),
+        ('access_expires_at', 'TIMESTAMP'),
+        ('department', 'TEXT'),
+        ('position', 'TEXT'),
+    ]:
+        try:
+            await conn.execute(f'ALTER TABLE users ADD COLUMN {col} {defn}')
+        except Exception:
+            pass  # columna ya existe
 
     # Device types table
     await conn.execute("""
