@@ -549,6 +549,10 @@
             <button onclick="navigateTo('devices')" class="nav-item admin-nav" data-page="devices">
                 <span class="nav-icon">📱</span> Dispositivos
             </button>
+            <button onclick="navigateTo('messages')" class="nav-item" data-page="messages" id="navMessages">
+                <span class="nav-icon">💬</span> Consultas
+                <span class="nav-badge" id="msgBadge" style="display:none">0</span>
+            </button>
             <!-- User (no admin) -->
             <button onclick="navigateTo('myAccess')" class="nav-item user-nav" data-page="myAccess" style="display:none">
                 <span class="nav-icon">🌐</span> Mi acceso
@@ -727,6 +731,77 @@
             </div>
         </div>
 
+        <!-- CONSULTAS -->
+        <div id="messagesPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Consultas</h1>
+                    <p id="msgsSubtitle">Mensajes entre usuarios y administración</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="openNewMsgModal()">+ Nueva consulta</button>
+            </div>
+
+            <!-- Lista de mensajes -->
+            <div class="section-card" id="msgListCard">
+                <div class="section-card-header">
+                    Bandeja
+                    <button class="btn btn-ghost btn-sm" onclick="loadMessages()">🔄 Actualizar</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>De</th>
+                                <th>Para</th>
+                                <th>Asunto</th>
+                                <th>Fecha</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="msgsTable">
+                            <tr class="empty-row"><td colspan="7">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Detalle del mensaje seleccionado -->
+            <div id="msgDetail" style="display:none">
+                <div class="section-card">
+                    <div class="section-card-header" style="gap:.5rem">
+                        <button class="btn btn-ghost btn-sm" onclick="closeMsgDetail()">← Volver</button>
+                        <span id="msgDetailSubject" style="font-size:1rem;font-weight:700;flex:1"></span>
+                        <span id="msgDetailDate" style="font-size:.8rem;color:var(--text-muted)"></span>
+                    </div>
+                    <div style="padding:1.25rem 1.5rem">
+                        <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+                            <span style="font-size:.8rem;color:var(--text-muted)">De: <strong id="msgDetailFrom"></strong></span>
+                            <span style="font-size:.8rem;color:var(--text-muted)" id="msgDetailToWrap">Para: <strong id="msgDetailTo"></strong></span>
+                        </div>
+                        <div id="msgDetailBody" style="font-size:.92rem;line-height:1.7;white-space:pre-wrap;background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:1rem"></div>
+
+                        <!-- Respuesta ya enviada -->
+                        <div id="msgReplyExist" style="display:none;margin-top:1.25rem">
+                            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.5rem">Respuesta</div>
+                            <div id="msgReplyExistBody" style="font-size:.92rem;line-height:1.7;white-space:pre-wrap;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:1rem"></div>
+                            <div style="font-size:.75rem;color:var(--text-muted);margin-top:.35rem">Respondido por <strong id="msgReplyExistBy"></strong> el <span id="msgReplyExistAt"></span></div>
+                        </div>
+
+                        <!-- Formulario de respuesta -->
+                        <div id="msgReplyForm" style="margin-top:1.25rem">
+                            <div style="font-size:.82rem;font-weight:600;margin-bottom:.4rem">Responder</div>
+                            <textarea id="msgReplyText" rows="4"
+                                style="width:100%;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:8px;font-size:.9rem;font-family:inherit;resize:vertical;min-height:90px"
+                                placeholder="Escribe tu respuesta…"></textarea>
+                            <button class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="sendReply()">Enviar respuesta</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- PERFIL -->
         <div id="profilePage" class="page">
             <div class="page-header">
@@ -805,6 +880,38 @@
         <div class="modal-footer">
             <button class="btn btn-ghost" onclick="closeApproveModal()">Cancelar</button>
             <button class="btn btn-success" id="approveConfirmBtn" onclick="confirmApprove()">✓ Confirmar aprobación</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal nueva consulta -->
+<div class="modal-overlay" id="newMsgModal">
+    <div class="modal-box" style="max-width:520px">
+        <div class="modal-header">
+            <h3>Nueva consulta</h3>
+            <button class="modal-close" onclick="closeNewMsgModal()">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <div id="newMsgToWrap">
+                <label class="modal-label" for="newMsgTo">Para (usuario)</label>
+                <select class="modal-select" id="newMsgTo">
+                    <option value="">→ Administración (general)</option>
+                </select>
+            </div>
+            <div>
+                <label class="modal-label" for="newMsgSubject">Asunto</label>
+                <input type="text" id="newMsgSubject" class="modal-select" placeholder="Ej: Solicitud de acceso adicional" style="padding:.65rem .85rem">
+            </div>
+            <div>
+                <label class="modal-label" for="newMsgBody">Mensaje</label>
+                <textarea id="newMsgBody" rows="5"
+                    style="width:100%;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:8px;font-size:.9rem;font-family:inherit;resize:vertical"
+                    placeholder="Describe tu consulta o solicitud…"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeNewMsgModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitNewMsg()">Enviar consulta</button>
         </div>
     </div>
 </div>

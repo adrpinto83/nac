@@ -90,6 +90,25 @@ async def init_db():
         )
     """)
 
+    # Messages / Consultas table
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_user_id INTEGER NOT NULL,
+            to_user_id   INTEGER,
+            subject      TEXT NOT NULL,
+            body         TEXT NOT NULL,
+            is_read      BOOLEAN DEFAULT 0,
+            reply_body   TEXT,
+            reply_at     TIMESTAMP,
+            replied_by   INTEGER,
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (to_user_id)   REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (replied_by)   REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+
     # Audit log table - Enhanced
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (

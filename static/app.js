@@ -86,6 +86,7 @@ function navigateTo(page) {
     if (page === 'pendingUsers') loadPendingUsers();
     if (page === 'users')        loadUsers();
     if (page === 'devices')      loadDevices();
+    if (page === 'messages')     { closeMsgDetail(); loadMessages(); }
     if (page === 'profile')      loadProfile();
     if (page === 'myAccess')     loadMyAccess();
 }
@@ -135,6 +136,7 @@ async function initApp() {
             el.style.display = isAdmin ? 'none' : 'flex';
         });
 
+        updateMsgBadge();
         if (isAdmin) {
             refreshPendingBadge();
             navigateTo('dashboard');
@@ -657,6 +659,167 @@ async function changePassword() {
         btn.disabled = false;
         btn.textContent = 'Actualizar contraseña';
     }
+}
+
+// ── Messages / Consultas ──────────────────────────────────────────────────────
+let allMessages = [];
+let activeMsgId = null;
+
+async function loadMessages() {
+    try {
+        allMessages = await fetchAPI(`${API}/messages/`) || [];
+        renderMessages(allMessages);
+        updateMsgBadge();
+    } catch { /* silent */ }
+}
+
+async function updateMsgBadge() {
+    try {
+        const d = await fetchAPI(`${API}/messages/unread-count`);
+        const n = d?.count || 0;
+        const badge = document.getElementById('msgBadge');
+        badge.textContent = n;
+        badge.style.display = n > 0 ? '' : 'none';
+    } catch { /* silent */ }
+}
+
+function renderMessages(list) {
+    const isAdmin = currentUser?.role === 'admin';
+    document.getElementById('msgsTable').innerHTML = list.length === 0
+        ? '<tr class="empty-row"><td colspan="7">Sin consultas</td></tr>'
+        : list.map(m => {
+            const unread = !m.is_read;
+            const fw = unread ? '700' : '400';
+            const replied = m.reply_body ? '<span class="badge badge-approved" style="font-size:.7rem">Respondido</span>'
+                                         : '<span class="badge badge-pending"  style="font-size:.7rem">Pendiente</span>';
+            return `<tr style="cursor:pointer" onclick="openMsgDetail(${m.id})">
+                <td>${unread ? '<span style="color:var(--primary);font-size:.85rem">●</span>' : ''}</td>
+                <td style="font-weight:${fw}">${escHtml(m.from_user_name || m.from_username || '—')}</td>
+                <td>${escHtml(m.to_user_name || 'Admin')}</td>
+                <td style="font-weight:${fw}">${escHtml(m.subject)}</td>
+                <td style="color:var(--text-muted);font-size:.8rem">${fmtDate(m.created_at)}</td>
+                <td>${replied}</td>
+                <td>
+                    ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMsg(${m.id})">🗑</button>` : ''}
+                </td>
+            </tr>`;
+        }).join('');
+}
+
+async function openMsgDetail(msgId) {
+    activeMsgId = msgId;
+    const m = allMessages.find(x => x.id === msgId);
+    if (!m) return;
+
+    document.getElementById('msgListCard').style.display = 'none';
+    document.getElementById('msgDetail').style.display = '';
+
+    document.getElementById('msgDetailSubject').textContent = m.subject;
+    document.getElementById('msgDetailDate').textContent = fmtDate(m.created_at);
+    document.getElementById('msgDetailFrom').textContent = m.from_user_name || m.from_username || '—';
+    const toWrap = document.getElementById('msgDetailToWrap');
+    document.getElementById('msgDetailTo').textContent = m.to_user_name || 'Administración';
+    toWrap.style.display = m.to_user_id || !m.from_user_id ? '' : 'none';
+    document.getElementById('msgDetailBody').textContent = m.body;
+
+    // Respuesta existente
+    const replyDiv = document.getElementById('msgReplyExist');
+    if (m.reply_body) {
+        replyDiv.style.display = '';
+        document.getElementById('msgReplyExistBody').textContent = m.reply_body;
+        document.getElementById('msgReplyExistBy').textContent = m.replied_by_name || 'Admin';
+        document.getElementById('msgReplyExistAt').textContent = fmtDate(m.reply_at);
+        document.getElementById('msgReplyForm').style.display = 'none';
+    } else {
+        replyDiv.style.display = 'none';
+        document.getElementById('msgReplyText').value = '';
+        // Solo admins o el destinatario pueden responder
+        const canReply = currentUser?.role === 'admin' || m.to_user_id === currentUser?.id;
+        document.getElementById('msgReplyForm').style.display = canReply ? '' : 'none';
+    }
+
+    // Marcar como leído
+    if (!m.is_read) {
+        try {
+            await fetchAPI(`${API}/messages/${msgId}/read`, { method: 'PUT' });
+            m.is_read = true;
+            updateMsgBadge();
+        } catch { /* silent */ }
+    }
+}
+
+function closeMsgDetail() {
+    activeMsgId = null;
+    document.getElementById('msgListCard').style.display = '';
+    document.getElementById('msgDetail').style.display = 'none';
+}
+
+async function sendReply() {
+    if (!activeMsgId) return;
+    const text = document.getElementById('msgReplyText').value.trim();
+    if (!text) { toast('Escribe una respuesta.', 'err'); return; }
+    try {
+        await fetchAPI(`${API}/messages/${activeMsgId}/reply`, {
+            method: 'POST', body: JSON.stringify({ reply_body: text })
+        });
+        toast('✅ Respuesta enviada.', 'ok');
+        await loadMessages();
+        closeMsgDetail();
+    } catch { toast('❌ Error al enviar respuesta.', 'err'); }
+}
+
+async function deleteMsg(msgId) {
+    if (!confirm('¿Eliminar esta consulta?')) return;
+    try {
+        await fetchAPI(`${API}/messages/${msgId}`, { method: 'DELETE' });
+        toast('🗑 Consulta eliminada.', 'ok');
+        if (activeMsgId === msgId) closeMsgDetail();
+        loadMessages();
+    } catch { toast('❌ Error al eliminar.', 'err'); }
+}
+
+async function openNewMsgModal() {
+    // Admin: cargar lista de usuarios para seleccionar destinatario
+    const sel = document.getElementById('newMsgTo');
+    sel.innerHTML = '<option value="">→ Administración (general)</option>';
+    document.getElementById('newMsgToWrap').style.display = currentUser?.role === 'admin' ? '' : 'none';
+
+    if (currentUser?.role === 'admin') {
+        try {
+            const users = await fetchAPI(`${API}/users/`) || [];
+            users.filter(u => u.username !== 'admin').forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = `${u.full_name} (@${u.username})`;
+                sel.appendChild(opt);
+            });
+        } catch { /* silent */ }
+    }
+
+    document.getElementById('newMsgSubject').value = '';
+    document.getElementById('newMsgBody').value = '';
+    document.getElementById('newMsgModal').classList.add('show');
+}
+
+function closeNewMsgModal() {
+    document.getElementById('newMsgModal').classList.remove('show');
+}
+
+async function submitNewMsg() {
+    const subject = document.getElementById('newMsgSubject').value.trim();
+    const body    = document.getElementById('newMsgBody').value.trim();
+    const toRaw   = document.getElementById('newMsgTo').value;
+    const to_user_id = toRaw ? parseInt(toRaw, 10) : null;
+
+    if (!subject || !body) { toast('Completa asunto y mensaje.', 'err'); return; }
+    try {
+        await fetchAPI(`${API}/messages/`, {
+            method: 'POST', body: JSON.stringify({ subject, body, to_user_id })
+        });
+        toast('✅ Consulta enviada.', 'ok');
+        closeNewMsgModal();
+        loadMessages();
+    } catch { toast('❌ Error al enviar consulta.', 'err'); }
 }
 
 // ── Utilities ──
