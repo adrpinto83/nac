@@ -127,13 +127,13 @@ if STATIC_DIR.exists():
                     )
                     device = await cursor.fetchone()
                 if device:
-                    # Determinar la URL de login del hotspot
+                    # Determinar la URL de login del hotspot (puerto 64872)
                     if link:
                         login_url = link
                     elif ip.startswith("192.168.101."):
-                        login_url = "http://192.168.101.1/login"
+                        login_url = "http://192.168.101.1:64872/login"
                     else:
-                        login_url = "http://192.168.100.1/login"
+                        login_url = "http://192.168.100.1:64872/login"
 
                     redirect_to = dst or "https://www.google.com"
                     username = mac.lower().replace(":", "")
