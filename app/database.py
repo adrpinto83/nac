@@ -50,6 +50,8 @@ async def init_db():
         ('access_expires_at', 'TIMESTAMP'),
         ('department', 'TEXT'),
         ('position', 'TEXT'),
+        ('download_mbps', 'INTEGER'),
+        ('upload_mbps', 'INTEGER'),
     ]:
         try:
             await conn.execute(f'ALTER TABLE users ADD COLUMN {col} {defn}')

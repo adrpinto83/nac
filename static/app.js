@@ -437,10 +437,17 @@ async function loadUsers() {
     } catch { /* silent */ }
 }
 
+function bwLabel(dl, ul) {
+    if (!dl && !ul) return '<span style="color:var(--text-muted);font-size:.8rem">Sin límite</span>';
+    const d = dl ? `⬇${dl}M` : '⬇∞';
+    const u = ul ? `⬆${ul}M` : '⬆∞';
+    return `<span style="font-size:.8rem;font-family:monospace;color:var(--primary)">${d} ${u}</span>`;
+}
+
 function renderUsers(list) {
     const isSuperadmin = currentUser?.username === 'admin';
     document.getElementById('usersTable').innerHTML = list.length === 0
-        ? '<tr class="empty-row"><td colspan="8">Sin usuarios</td></tr>'
+        ? '<tr class="empty-row"><td colspan="9">Sin usuarios</td></tr>'
         : list.map(u => `
             <tr>
                 <td><strong>${escHtml(u.username)}</strong></td>
@@ -449,6 +456,10 @@ function renderUsers(list) {
                 <td>${u.position || '—'}</td>
                 <td>${u.email || '—'}</td>
                 <td>${statusBadge(u.approval_status || '')}</td>
+                <td>
+                    ${bwLabel(u.download_mbps, u.upload_mbps)}
+                    ${u.username !== 'admin' ? `<button class="btn btn-ghost btn-sm" style="margin-left:.4rem;padding:2px 7px" onclick="openBandwidthModal(${u.id},'${escAttr(u.full_name)}',${u.download_mbps||'null'},${u.upload_mbps||'null'})">✎</button>` : ''}
+                </td>
                 <td>${roleCell(u, isSuperadmin)}</td>
                 <td style="white-space:nowrap">${accessActions(u)}</td>
             </tr>`).join('');
@@ -467,6 +478,40 @@ function accessActions(u) {
         btns.push(`<button class="btn btn-success btn-sm" onclick="reactivateUser(${u.id},'${escAttr(u.full_name)}')">↺ Reactivar</button>`);
     }
     return btns.join(' ');
+}
+
+// ── Ancho de banda ──────────────────────────────────────────────────────────
+let _bwUserId = null;
+
+function openBandwidthModal(userId, name, dl, ul) {
+    _bwUserId = userId;
+    document.getElementById('bwUserLabel').textContent = `Usuario: ${name}`;
+    document.getElementById('bwDownload').value = dl ?? '';
+    document.getElementById('bwUpload').value   = ul ?? '';
+    document.getElementById('bandwidthModal').classList.add('show');
+}
+
+function closeBandwidthModal() {
+    document.getElementById('bandwidthModal').classList.remove('show');
+    _bwUserId = null;
+}
+
+async function saveBandwidth() {
+    const dl = document.getElementById('bwDownload').value;
+    const ul = document.getElementById('bwUpload').value;
+    const body = {
+        download_mbps: dl !== '' ? parseInt(dl, 10) : null,
+        upload_mbps:   ul !== '' ? parseInt(ul, 10) : null,
+    };
+    try {
+        await fetchAPI(`${API}/users/${_bwUserId}/bandwidth`, { method: 'PUT', body: JSON.stringify(body) });
+        const msg = (body.download_mbps || body.upload_mbps)
+            ? `Límite: ⬇${body.download_mbps ?? '∞'}M ⬆${body.upload_mbps ?? '∞'}M`
+            : 'Sin límite de ancho de banda';
+        toast(`Guardado. ${msg}. Aplicará en ~60s.`, 'ok');
+        closeBandwidthModal();
+        loadUsers();
+    } catch (e) { toast(`Error: ${e.message}`, 'err'); }
 }
 
 async function blockUser(userId, name) {

@@ -672,12 +672,13 @@
                                 <th>Cargo</th>
                                 <th>Correo</th>
                                 <th>Estado</th>
+                                <th>Ancho de banda</th>
                                 <th>Rol</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="usersTable">
-                            <tr class="empty-row"><td colspan="8">Cargando…</td></tr>
+                            <tr class="empty-row"><td colspan="9">Cargando…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -998,9 +999,39 @@
     </div>
 </div>
 
+<!-- Modal: Ancho de banda -->
+<div class="modal-overlay" id="bandwidthModal">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+            <h3>Ancho de banda</h3>
+            <button class="modal-close" onclick="closeBandwidthModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p id="bwUserLabel" style="margin-bottom:1.2rem;color:var(--text-muted);font-size:.9rem"></p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+                <div>
+                    <label style="display:block;margin-bottom:.4rem;font-size:.85rem;font-weight:600">⬇ Descarga (Mbps)</label>
+                    <input type="number" id="bwDownload" min="0" max="1000" placeholder="Sin límite"
+                           style="width:100%;padding:.55rem .75rem;border:1px solid var(--border);border-radius:8px;font-size:.95rem">
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:.4rem;font-size:.85rem;font-weight:600">⬆ Subida (Mbps)</label>
+                    <input type="number" id="bwUpload" min="0" max="1000" placeholder="Sin límite"
+                           style="width:100%;padding:.55rem .75rem;border:1px solid var(--border);border-radius:8px;font-size:.95rem">
+                </div>
+            </div>
+            <p style="font-size:.8rem;color:var(--text-muted)">Deja en blanco para acceso sin límite. Los cambios aplican en el próximo ciclo de sincronización (~60s).</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeBandwidthModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveBandwidth()">Guardar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=4"></script>
 </body>
 </html>

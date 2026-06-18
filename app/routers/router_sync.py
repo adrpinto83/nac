@@ -317,6 +317,30 @@ async def approved_macs_list(key: str = Query(default="")):
     return "\n".join(r[0] for r in rows if r[0]) + "\n"
 
 
+@router.get("/approved-devices")
+async def approved_devices_with_limits(key: str = Query(default="")):
+    """MACs aprobadas con límites de ancho de banda para el sync_agent."""
+    if key != SYNC_KEY:
+        raise HTTPException(status_code=403, detail="Invalid key")
+
+    now = datetime.utcnow().isoformat()
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT d.mac_address, u.download_mbps, u.upload_mbps
+           FROM devices d
+           JOIN users u ON d.user_id = u.id
+           WHERE u.approval_status = 'approved' AND u.is_active = 1
+             AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
+        (now,)
+    )
+    rows = await cursor.fetchall()
+    await db.close()
+    return [
+        {"mac": r[0], "download_mbps": r[1], "upload_mbps": r[2]}
+        for r in rows if r[0]
+    ]
+
+
 @router.get("/check-mac")
 async def check_mac(mac: str = Query(default="")):
     """Verifica si una MAC está aprobada. Acceso público (sin key) para login.html."""

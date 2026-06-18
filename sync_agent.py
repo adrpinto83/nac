@@ -42,8 +42,9 @@ INTERVAL_S   = 60
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-async def get_approved_macs() -> list[str]:
-    url = f"{RAILWAY_URL}/api/router/approved-macs?key={SYNC_KEY}"
+async def get_approved_devices() -> list[dict]:
+    """Retorna lista de {mac, download_mbps, upload_mbps} desde Railway."""
+    url = f"{RAILWAY_URL}/api/router/approved-devices?key={SYNC_KEY}"
     text = None
     # httpx a veces falla con SSL handshake timeout en WSL; curl es confiable.
     try:
@@ -62,9 +63,19 @@ async def get_approved_macs() -> list[str]:
             raise RuntimeError(f"curl falló: {err.decode()[:200]}")
         text = out.decode()
 
-    macs = [m.strip().upper() for m in text.splitlines() if m.strip()]
-    log.info(f"Railway → {len(macs)} MACs aprobadas")
-    return macs
+    import json as _json
+    devices = _json.loads(text)
+    log.info(f"Railway → {len(devices)} dispositivos aprobados")
+    return devices
+
+
+def build_rate_limit(dl: int | None, ul: int | None) -> str:
+    """Convierte Mbps a formato MikroTik rate-limit 'DLM/ULM'. Vacío = sin límite."""
+    if not dl and not ul:
+        return ""
+    d = f"{dl}M" if dl else "0"
+    u = f"{ul}M" if ul else "0"
+    return f"{d}/{u}"
 
 
 async def router_request(method: str, path: str, client: httpx.AsyncClient, **kwargs):
@@ -97,7 +108,7 @@ async def get_fwd_unauth_id(r: httpx.AsyncClient) -> str:
 
 async def sync_once(test_only: bool = False) -> bool:
     try:
-        approved = await get_approved_macs()
+        devices = await get_approved_devices()
         auth = (ROUTER_USER, ROUTER_PASS)
 
         async with httpx.AsyncClient(auth=auth, verify=False, timeout=10) as r:
@@ -108,7 +119,10 @@ async def sync_once(test_only: bool = False) -> bool:
                 log.info("Modo test — sin cambios")
                 return True
 
-            target = {m.upper() for m in approved if m}
+            # target: {MAC_UPPER: {download_mbps, upload_mbps}}
+            target: dict[str, dict] = {
+                d["mac"].upper(): d for d in devices if d.get("mac")
+            }
 
             # Descubrir ID del forward hs-unauth jump
             fwd_unauth_id, flt_rules = await get_fwd_unauth_id(r)
@@ -120,18 +134,41 @@ async def sync_once(test_only: bool = False) -> bool:
             users = await router_request("get", "/ip/hotspot/user", r)
             if not isinstance(users, list):
                 users = []
-            nac_u = {u.get("name", "").upper(): u.get(".id")
+            # nac_u: {MAC_UPPER: {".id": ..., "rate-limit": ...}}
+            nac_u = {u.get("name", "").upper(): u
                      for u in users if COMMENT in u.get("comment", "")}
 
-            for mac in target - nac_u.keys():
-                await router_request("put", "/ip/hotspot/user", r, json={
-                    "name": mac,                 # nombre = MAC (mac-as-username)
+            for mac in target.keys() - nac_u.keys():
+                dl = target[mac].get("download_mbps")
+                ul = target[mac].get("upload_mbps")
+                rate = build_rate_limit(dl, ul)
+                body = {
+                    "name": mac,
                     "profile": "default",
-                    "password": "",              # mac-auth-password="" en el perfil
-                    "comment": nac_comment(mac)
-                })
-                log.info(f"  +hs-user: {mac}")
-            for name, uid in nac_u.items():
+                    "password": "",
+                    "comment": nac_comment(mac),
+                }
+                if rate:
+                    body["rate-limit"] = rate
+                await router_request("put", "/ip/hotspot/user", r, json=body)
+                log.info(f"  +hs-user: {mac}" + (f" rate={rate}" if rate else ""))
+
+            # Actualizar rate-limit si cambió para usuarios ya existentes
+            for name, udata in nac_u.items():
+                if name not in target:
+                    continue
+                uid = udata.get(".id")
+                dl = target[name].get("download_mbps")
+                ul = target[name].get("upload_mbps")
+                new_rate = build_rate_limit(dl, ul)
+                cur_rate = udata.get("rate-limit", "")
+                if new_rate != cur_rate:
+                    patch = {"rate-limit": new_rate} if new_rate else {"rate-limit": ""}
+                    await router_request("patch", f"/ip/hotspot/user/{uid}", r, json=patch)
+                    log.info(f"  ~hs-user rate: {name} {cur_rate!r} → {new_rate!r}")
+
+            for name, udata in nac_u.items():
+                uid = udata.get(".id")
                 if name not in target:
                     await router_request("delete", f"/ip/hotspot/user/{uid}", r)
                     log.info(f"  -hs-user: {name}")
@@ -163,7 +200,7 @@ async def sync_once(test_only: bool = False) -> bool:
                 and rule.get("src-mac-address", "")
             }
 
-            for mac in target - nac_flt.keys():
+            for mac in target.keys() - nac_flt.keys():
                 await router_request("put", "/ip/firewall/filter", r, json={
                     "chain": "forward",
                     "src-mac-address": mac,

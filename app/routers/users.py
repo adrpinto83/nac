@@ -61,6 +61,8 @@ class UserResponse(BaseModel):
     is_active: bool
     approval_status: Optional[str] = None
     created_at: Optional[str]
+    download_mbps: Optional[int] = None
+    upload_mbps: Optional[int] = None
 
 
 class UserDetailResponse(UserResponse):
@@ -91,7 +93,7 @@ async def list_users(authorization: Optional[str] = Header(None)):
     db = await get_db()
     cursor = await db.execute(
         """SELECT id, username, full_name, email, phone, department, position, company,
-                  role, is_active, approval_status, created_at
+                  role, is_active, approval_status, created_at, download_mbps, upload_mbps
            FROM users ORDER BY created_at DESC"""
     )
     users = await cursor.fetchall()
@@ -101,7 +103,8 @@ async def list_users(authorization: Optional[str] = Header(None)):
         UserResponse(
             id=u[0], username=u[1], full_name=u[2], email=u[3],
             phone=u[4], department=u[5], position=u[6], company=u[7],
-            role=u[8], is_active=bool(u[9]), approval_status=u[10], created_at=u[11]
+            role=u[8], is_active=bool(u[9]), approval_status=u[10], created_at=u[11],
+            download_mbps=u[12], upload_mbps=u[13]
         )
         for u in users
     ]
@@ -291,6 +294,11 @@ async def delete_user(user_id: int, authorization: Optional[str] = Header(None))
     return {"message": "User deleted successfully"}
 
 
+class BandwidthRequest(BaseModel):
+    download_mbps: Optional[int] = None  # None = sin límite
+    upload_mbps: Optional[int] = None
+
+
 class AccessRequest(BaseModel):
     action: str  # 'approve' | 'block' | 'reject'
 
@@ -330,6 +338,39 @@ async def set_user_access(user_id: int, body: AccessRequest, authorization: Opti
     await db.commit()
     await db.close()
     return {"message": "Acceso actualizado", "approval_status": new_status, "is_active": bool(new_active)}
+
+
+@router.put("/{user_id}/bandwidth")
+async def set_user_bandwidth(user_id: int, body: BandwidthRequest, authorization: Optional[str] = Header(None)):
+    """Establecer límites de ancho de banda por usuario. Solo admins."""
+    payload = await verify_token(authorization)
+
+    db = await get_db()
+    cursor = await db.execute("SELECT role FROM users WHERE username = ?", (payload.get("sub"),))
+    caller = await cursor.fetchone()
+    if not caller or caller[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Solo administradores pueden cambiar límites de ancho de banda.")
+
+    cursor = await db.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not await cursor.fetchone():
+        await db.close()
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    if body.download_mbps is not None and body.download_mbps < 0:
+        await db.close()
+        raise HTTPException(status_code=400, detail="El límite de descarga no puede ser negativo.")
+    if body.upload_mbps is not None and body.upload_mbps < 0:
+        await db.close()
+        raise HTTPException(status_code=400, detail="El límite de subida no puede ser negativo.")
+
+    await db.execute(
+        "UPDATE users SET download_mbps = ?, upload_mbps = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (body.download_mbps, body.upload_mbps, user_id),
+    )
+    await db.commit()
+    await db.close()
+    return {"ok": True, "download_mbps": body.download_mbps, "upload_mbps": body.upload_mbps}
 
 
 @router.put("/{user_id}/role")
