@@ -445,12 +445,43 @@ function renderUsers(list) {
                 <td>${u.email || '—'}</td>
                 <td>${statusBadge(u.approval_status || '')}</td>
                 <td>${roleCell(u, isSuperadmin)}</td>
-                <td>
-                    ${u.approval_status === 'pending'
-                        ? `<button class="btn btn-success btn-sm" onclick="openApproveModal(${u.id},'${escAttr(u.full_name)}','${escAttr(u.department||'')}','${escAttr(u.position||'')}',${u.access_duration_hours||'null'})">Aprobar</button>`
-                        : '—'}
-                </td>
+                <td style="white-space:nowrap">${accessActions(u)}</td>
             </tr>`).join('');
+}
+
+function accessActions(u) {
+    if (u.username === 'admin') return '—';
+    const s = u.approval_status;
+    const btns = [];
+    if (s === 'pending') {
+        btns.push(`<button class="btn btn-success btn-sm" onclick="openApproveModal(${u.id},'${escAttr(u.full_name)}','${escAttr(u.department||'')}','${escAttr(u.position||'')}',${u.access_duration_hours||'null'})">✓ Aprobar</button>`);
+        btns.push(`<button class="btn btn-danger  btn-sm" onclick="rejectUser(${u.id})">✕ Rechazar</button>`);
+    } else if (s === 'approved') {
+        btns.push(`<button class="btn btn-warning btn-sm" onclick="blockUser(${u.id},'${escAttr(u.full_name)}')">⊘ Bloquear</button>`);
+    } else {
+        btns.push(`<button class="btn btn-success btn-sm" onclick="reactivateUser(${u.id},'${escAttr(u.full_name)}')">↺ Reactivar</button>`);
+    }
+    return btns.join(' ');
+}
+
+async function blockUser(userId, name) {
+    if (!confirm(`¿Bloquear acceso a "${name}"?\nPerderá el internet de inmediato.`)) return;
+    try {
+        await fetchAPI(`${API}/users/${userId}/access`, { method: 'PUT', body: JSON.stringify({ action: 'block' }) });
+        toast(`⊘ Acceso bloqueado para ${name}.`, 'ok');
+        loadUsers();
+        loadDashboard();
+    } catch { toast('❌ Error al bloquear.', 'err'); }
+}
+
+async function reactivateUser(userId, name) {
+    if (!confirm(`¿Reactivar acceso a "${name}"?`)) return;
+    try {
+        await fetchAPI(`${API}/users/${userId}/access`, { method: 'PUT', body: JSON.stringify({ action: 'approve' }) });
+        toast(`✅ Acceso reactivado para ${name}.`, 'ok');
+        loadUsers();
+        loadDashboard();
+    } catch { toast('❌ Error al reactivar.', 'err'); }
 }
 
 function roleCell(u, isSuperadmin) {
@@ -497,16 +528,34 @@ async function loadDevices() {
 
 function renderDevices(list) {
     document.getElementById('devicesTable').innerHTML = list.length === 0
-        ? '<tr class="empty-row"><td colspan="6">Sin dispositivos</td></tr>'
+        ? '<tr class="empty-row"><td colspan="7">Sin dispositivos</td></tr>'
         : list.map(d => `
             <tr>
-                <td>${d.hostname || '—'}</td>
+                <td>
+                    <strong>${escHtml(d.owner_name || d.owner_username || '—')}</strong>
+                    ${d.owner_username ? `<br><small style="color:var(--text-muted)">${escHtml(d.owner_username)}</small>` : ''}
+                </td>
                 <td><code style="font-family:monospace;font-size:.82rem">${d.mac_address}</code></td>
                 <td>${d.ip_address || '—'}</td>
                 <td>${d.device_type || '—'}</td>
                 <td>${[d.os_type, d.os_version].filter(Boolean).join(' ') || '—'}</td>
                 <td>${fmtDate(d.created_at)}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm"
+                        onclick="deleteDevice(${d.id},'${escAttr(d.mac_address)}','${escAttr(d.owner_name||d.owner_username||'')}')">
+                        🗑 Eliminar
+                    </button>
+                </td>
             </tr>`).join('');
+}
+
+async function deleteDevice(deviceId, mac, ownerName) {
+    if (!confirm(`¿Eliminar el dispositivo ${mac}${ownerName ? ' de ' + ownerName : ''}?\nPerderá acceso a la red de inmediato.`)) return;
+    try {
+        await fetchAPI(`${API}/devices/${deviceId}`, { method: 'DELETE' });
+        toast(`🗑 Dispositivo ${mac} eliminado.`, 'ok');
+        loadDevices();
+    } catch { toast('❌ Error al eliminar dispositivo.', 'err'); }
 }
 
 function filterDevices() {

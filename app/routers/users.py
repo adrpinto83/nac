@@ -291,6 +291,47 @@ async def delete_user(user_id: int, authorization: Optional[str] = Header(None))
     return {"message": "User deleted successfully"}
 
 
+class AccessRequest(BaseModel):
+    action: str  # 'approve' | 'block' | 'reject'
+
+
+@router.put("/{user_id}/access")
+async def set_user_access(user_id: int, body: AccessRequest, authorization: Optional[str] = Header(None)):
+    """Conceder o revocar acceso a internet. Solo admins."""
+    payload = await verify_token(authorization)
+    if body.action not in ("approve", "block", "reject"):
+        raise HTTPException(status_code=400, detail="Acción inválida. Usa 'approve', 'block' o 'reject'.")
+
+    db = await get_db()
+    cursor = await db.execute("SELECT role FROM users WHERE username = ?", (payload.get("sub"),))
+    caller = await cursor.fetchone()
+    if not caller or caller[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Solo administradores pueden cambiar el acceso.")
+
+    cursor = await db.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
+    target = await cursor.fetchone()
+    if not target:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    if target[1] == "admin":
+        await db.close()
+        raise HTTPException(status_code=400, detail="No se puede modificar el administrador principal.")
+
+    if body.action == "approve":
+        new_status, new_active = "approved", 1
+    else:
+        new_status, new_active = "rejected", 0
+
+    await db.execute(
+        "UPDATE users SET approval_status = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (new_status, new_active, user_id),
+    )
+    await db.commit()
+    await db.close()
+    return {"message": "Acceso actualizado", "approval_status": new_status, "is_active": bool(new_active)}
+
+
 @router.put("/{user_id}/role")
 async def update_user_role(user_id: int, body: RoleUpdateRequest, authorization: Optional[str] = Header(None)):
     """Cambiar rol de un usuario. Solo el administrador principal (username='admin') puede hacerlo."""

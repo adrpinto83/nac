@@ -50,6 +50,8 @@ class DeviceResponse(BaseModel):
     last_seen: Optional[str]
     notes: Optional[str]
     created_at: Optional[str]
+    owner_name: Optional[str] = None
+    owner_username: Optional[str] = None
 
 
 async def verify_token(authorization: str = None) -> dict:
@@ -68,14 +70,18 @@ async def verify_token(authorization: str = None) -> dict:
 
 @router.get("/", response_model=List[DeviceResponse])
 async def list_devices(authorization: Optional[str] = Header(None)):
-    """List all devices."""
+    """List all devices with owner info."""
     await verify_token(authorization)
 
     db = await get_db()
     cursor = await db.execute(
-        """SELECT id, user_id, mac_address, ip_address, hostname, device_type, manufacturer, model,
-                  serial_number, os_type, os_version, status, last_seen, notes, created_at
-           FROM devices ORDER BY created_at DESC"""
+        """SELECT d.id, d.user_id, d.mac_address, d.ip_address, d.hostname, d.device_type,
+                  d.manufacturer, d.model, d.serial_number, d.os_type, d.os_version,
+                  d.status, d.last_seen, d.notes, d.created_at,
+                  u.full_name, u.username
+           FROM devices d
+           LEFT JOIN users u ON d.user_id = u.id
+           ORDER BY d.created_at DESC"""
     )
     devices = await cursor.fetchall()
     await db.close()
@@ -96,7 +102,9 @@ async def list_devices(authorization: Optional[str] = Header(None)):
             status=d[11],
             last_seen=d[12],
             notes=d[13],
-            created_at=d[14]
+            created_at=d[14],
+            owner_name=d[15],
+            owner_username=d[16],
         )
         for d in devices
     ]
