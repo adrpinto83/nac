@@ -315,3 +315,23 @@ async def approved_macs_list(key: str = Query(default="")):
     rows = await cursor.fetchall()
     await db.close()
     return "\n".join(r[0] for r in rows if r[0]) + "\n"
+
+
+@router.get("/check-mac")
+async def check_mac(mac: str = Query(default="")):
+    """Verifica si una MAC está aprobada. Acceso público (sin key) para login.html."""
+    if not mac:
+        return {"approved": False}
+    mac_upper = mac.upper().strip()
+    now = datetime.utcnow().isoformat()
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT d.id FROM devices d
+           JOIN users u ON d.user_id = u.id
+           WHERE UPPER(d.mac_address) = ? AND u.approval_status = 'approved' AND u.is_active = 1
+             AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
+        (mac_upper, now)
+    )
+    row = await cursor.fetchone()
+    await db.close()
+    return {"approved": bool(row), "mac": mac_upper}
