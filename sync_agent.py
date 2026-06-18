@@ -44,12 +44,27 @@ INTERVAL_S   = 60
 
 async def get_approved_macs() -> list[str]:
     url = f"{RAILWAY_URL}/api/router/approved-macs?key={SYNC_KEY}"
-    async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url)
-        r.raise_for_status()
-        macs = [m.strip().upper() for m in r.text.splitlines() if m.strip()]
-        log.info(f"Railway → {len(macs)} MACs aprobadas")
-        return macs
+    text = None
+    # httpx a veces falla con SSL handshake timeout en WSL; curl es confiable.
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(url)
+            r.raise_for_status()
+            text = r.text
+    except Exception as e:
+        log.warning(f"httpx falló ({type(e).__name__}), usando curl…")
+        proc = await asyncio.create_subprocess_exec(
+            "curl", "-4", "-sf", "--max-time", "20", url,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        out, err = await proc.communicate()
+        if proc.returncode != 0:
+            raise RuntimeError(f"curl falló: {err.decode()[:200]}")
+        text = out.decode()
+
+    macs = [m.strip().upper() for m in text.splitlines() if m.strip()]
+    log.info(f"Railway → {len(macs)} MACs aprobadas")
+    return macs
 
 
 async def router_request(method: str, path: str, client: httpx.AsyncClient, **kwargs):
@@ -98,27 +113,28 @@ async def sync_once(test_only: bool = False) -> bool:
             # Descubrir ID del forward hs-unauth jump
             fwd_unauth_id, flt_rules = await get_fwd_unauth_id(r)
 
-            # ── Hotspot users (MAC auto-login via login.html) ──────────────────
+            # ── Hotspot users (MAC auto-login) ─────────────────────────────────
+            # IMPORTANTE: el perfil usa mac-auth-mode=mac-as-username, así que el
+            # NOMBRE del usuario debe ser exactamente la MAC (mayúsculas, con ":").
+            # Si no, el login-by=mac nunca encuentra al usuario y falla.
             users = await router_request("get", "/ip/hotspot/user", r)
             if not isinstance(users, list):
                 users = []
-            nac_u = {u.get("mac-address", "").upper(): u.get(".id")
+            nac_u = {u.get("name", "").upper(): u.get(".id")
                      for u in users if COMMENT in u.get("comment", "")}
 
             for mac in target - nac_u.keys():
-                username = mac.lower().replace(":", "")
                 await router_request("put", "/ip/hotspot/user", r, json={
-                    "name": username,
-                    "mac-address": mac,
+                    "name": mac,                 # nombre = MAC (mac-as-username)
                     "profile": "default",
-                    "password": "",
+                    "password": "",              # mac-auth-password="" en el perfil
                     "comment": nac_comment(mac)
                 })
                 log.info(f"  +hs-user: {mac}")
-            for mac, uid in nac_u.items():
-                if mac not in target:
+            for name, uid in nac_u.items():
+                if name not in target:
                     await router_request("delete", f"/ip/hotspot/user/{uid}", r)
-                    log.info(f"  -hs-user: {mac}")
+                    log.info(f"  -hs-user: {name}")
 
             # ── Forward filter accept por MAC (before hs-unauth jump) ──────────
             if not isinstance(flt_rules, list):
