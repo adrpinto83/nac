@@ -135,6 +135,21 @@ async def sync_once(test_only: bool = False) -> bool:
                 if name not in target:
                     await router_request("delete", f"/ip/hotspot/user/{uid}", r)
                     log.info(f"  -hs-user: {name}")
+                    # Limpiar sesión activa y host stale para que el
+                    # dispositivo no quede con auth=true residual
+                    try:
+                        active = await router_request("get", "/ip/hotspot/active", r)
+                        for a in (active if isinstance(active, list) else []):
+                            if a.get("mac-address", "").upper() == name.upper():
+                                await router_request("delete", f"/ip/hotspot/active/{a.get('.id')}", r)
+                                log.info(f"  -hs-active: {name}")
+                        hosts = await router_request("get", "/ip/hotspot/host", r)
+                        for h in (hosts if isinstance(hosts, list) else []):
+                            if h.get("mac-address", "").upper() == name.upper():
+                                await router_request("delete", f"/ip/hotspot/host/{h.get('.id')}", r)
+                                log.info(f"  -hs-host: {name}")
+                    except Exception as e:
+                        log.warning(f"  limpieza sesión {name}: {e}")
 
             # ── Forward filter accept por MAC (before hs-unauth jump) ──────────
             if not isinstance(flt_rules, list):
