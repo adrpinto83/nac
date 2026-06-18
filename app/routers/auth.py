@@ -533,3 +533,82 @@ async def reject_user(user_id: int, authorization: Optional[str] = Header(None))
     await db.close()
 
     return {"message": "User rejected"}
+
+
+# ============== ADD DEVICE TO EXISTING USER ==============
+
+class AddDeviceRequest(BaseModel):
+    mac_address: str
+    ip_address: Optional[str] = None
+    device_info: Optional[str] = None  # JSON string con type, os, etc.
+
+
+@router.post("/add-device")
+async def add_device(request: AddDeviceRequest, authorization: Optional[str] = Header(None)):
+    """
+    Agrega un nuevo dispositivo (MAC) al usuario autenticado.
+    El usuario debe estar aprobado. La MAC no puede estar ya registrada para otro usuario.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = decode_token(authorization.split(" ")[1])
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    mac = request.mac_address.strip().upper()
+
+    if _is_random_mac(mac):
+        raise HTTPException(status_code=400, detail="MAC_RANDOMIZED")
+
+    db = await get_db()
+
+    # Obtener usuario
+    cur = await db.execute(
+        "SELECT id, approval_status FROM users WHERE username = ?", (payload["sub"],)
+    )
+    user = await cur.fetchone()
+    if not user:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user_id, approval_status = user
+
+    # Verificar que la MAC no pertenezca ya a otro usuario
+    cur = await db.execute(
+        "SELECT user_id FROM devices WHERE mac_address = ?", (mac,)
+    )
+    existing = await cur.fetchone()
+    if existing:
+        if existing[0] == user_id:
+            await db.close()
+            raise HTTPException(status_code=409, detail="DEVICE_ALREADY_YOURS")
+        await db.close()
+        raise HTTPException(status_code=409, detail="DEVICE_TAKEN")
+
+    import json
+    dev = {}
+    try:
+        dev = json.loads(request.device_info or "{}")
+    except Exception:
+        pass
+
+    await db.execute(
+        """INSERT INTO devices
+           (user_id, mac_address, ip_address, hostname, device_type, os_type, os_version, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, mac, request.ip_address,
+         dev.get("hostname", ""),
+         dev.get("type", "unknown"),
+         dev.get("os", ""),
+         dev.get("os_version", ""),
+         request.device_info),
+    )
+    await db.commit()
+    await db.close()
+
+    return {
+        "ok": True,
+        "mac_address": mac,
+        "approval_status": approval_status,
+        "message": "Dispositivo agregado correctamente"
+    }

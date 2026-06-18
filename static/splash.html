@@ -672,9 +672,28 @@
                 </form>
 
                 <div class="divider">¿Ya tienes cuenta?</div>
-                <button type="button" class="btn-login" onclick="location.href='/'">
-                    Iniciar sesión
-                </button>
+
+                <!-- Login para agregar dispositivo existente -->
+                <div id="addDevSection">
+                    <p style="font-size:.82rem;color:var(--muted);text-align:center;margin-bottom:.85rem">
+                        Si ya tienes acceso aprobado, inicia sesión para agregar este dispositivo a tu cuenta.
+                    </p>
+                    <div class="msg" id="addDevMsg"></div>
+                    <div style="display:grid;gap:.65rem">
+                        <div>
+                            <label for="adUsername">Usuario</label>
+                            <input type="text" id="adUsername" autocomplete="username"
+                                   autocapitalize="none" spellcheck="false" placeholder="tu.usuario">
+                        </div>
+                        <div>
+                            <label for="adPassword">Contraseña</label>
+                            <input type="password" id="adPassword" autocomplete="current-password" placeholder="Contraseña">
+                        </div>
+                        <button type="button" class="btn-submit" id="addDevBtn" onclick="loginAndAddDevice()" style="margin-top:0">
+                            Agregar este dispositivo a mi cuenta
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -874,6 +893,96 @@
         pw.type = show ? 'text' : 'password';
         this.textContent = show ? '🙈' : '👁️';
     });
+
+    // ── Ocultar sección "agregar dispositivo" si no hay MAC del router ──
+    if (!routerMAC) {
+        const sec = document.getElementById('addDevSection');
+        if (sec) sec.style.display = 'none';
+    }
+
+    // ── Login e agregar dispositivo a cuenta existente ──
+    async function loginAndAddDevice() {
+        const username = document.getElementById('adUsername').value.trim();
+        const password = document.getElementById('adPassword').value;
+        const msgEl    = document.getElementById('addDevMsg');
+        const btn      = document.getElementById('addDevBtn');
+
+        msgEl.className = 'msg';
+        if (!username || !password) {
+            msgEl.className = 'msg err';
+            msgEl.textContent = 'Ingresa tu usuario y contraseña.';
+            return;
+        }
+        if (!routerMAC) {
+            msgEl.className = 'msg err';
+            msgEl.textContent = 'No se detectó la dirección MAC. Conéctate desde el WiFi y recarga.';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spin"></span>Verificando…';
+
+        try {
+            // 1. Login
+            const loginRes = await fetch(API + '/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const loginData = await loginRes.json();
+            if (!loginRes.ok) {
+                const errMap = {
+                    'Invalid credentials':         'Usuario o contraseña incorrectos.',
+                    'User is inactive':            'Tu cuenta está inactiva. Contacta al administrador.',
+                    'User account pending approval': 'Tu cuenta aún está pendiente de aprobación.',
+                };
+                msgEl.className = 'msg err';
+                msgEl.textContent = errMap[loginData.detail] || (loginData.detail || 'Error al iniciar sesión.');
+                btn.disabled = false; btn.textContent = 'Agregar este dispositivo a mi cuenta';
+                return;
+            }
+
+            const token = loginData.access_token;
+
+            // 2. Agregar dispositivo
+            const devInfo = JSON.stringify({
+                type: d.type, os: d.os, os_version: d.osVer,
+                browser: d.browser, user_agent: navigator.userAgent
+            });
+            const addRes = await fetch(API + '/auth/add-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({
+                    mac_address: routerMAC,
+                    ip_address: routerIP || null,
+                    device_info: devInfo
+                })
+            });
+            const addData = await addRes.json();
+
+            if (addRes.ok) {
+                // Mostrar pantalla de éxito según estado de aprobación
+                if (addData.approval_status === 'approved') {
+                    showScreen('screenApproved');
+                } else {
+                    showScreen('screenPending');
+                }
+            } else {
+                const errMap = {
+                    'DEVICE_ALREADY_YOURS': 'Este dispositivo ya está en tu cuenta.',
+                    'DEVICE_TAKEN':         'Esta MAC ya está registrada para otro usuario. Contacta al administrador.',
+                    'MAC_RANDOMIZED':       'Tu dispositivo usa MAC aleatoria. Desactívala y vuelve a conectar.',
+                };
+                msgEl.className = 'msg err';
+                msgEl.textContent = errMap[addData.detail] || (addData.detail || 'Error al agregar dispositivo.');
+                btn.disabled = false; btn.textContent = 'Agregar este dispositivo a mi cuenta';
+            }
+        } catch {
+            msgEl.className = 'msg err';
+            msgEl.textContent = 'Error de red. Verifica tu conexión e intenta de nuevo.';
+            btn.disabled = false; btn.textContent = 'Agregar este dispositivo a mi cuenta';
+        }
+    }
 
     // ── Enviar formulario ──
     document.getElementById('regForm').addEventListener('submit', async function (e) {

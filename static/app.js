@@ -266,7 +266,10 @@ async function loadMyAccess() {
                     </div>
                 </div>
                 <div class="section-card">
-                    <div class="section-card-header">📱 Mis dispositivos</div>
+                    <div class="section-card-header">
+                        📱 Mis dispositivos
+                        <button class="btn btn-primary btn-sm" onclick="document.getElementById('addMyDeviceModal').classList.add('show')">+ Agregar</button>
+                    </div>
                     <div style="padding:1.1rem 1.5rem">${devHtml}</div>
                 </div>
             </div>`;
@@ -661,6 +664,104 @@ async function changePassword() {
     }
 }
 
+// ── Multi-dispositivo ────────────────────────────────────────────────────────
+
+function formatMacInput(el) {
+    let v = el.value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+    let out = '';
+    for (let i = 0; i < v.length && i < 12; i++) {
+        if (i > 0 && i % 2 === 0) out += ':';
+        out += v[i];
+    }
+    el.value = out;
+}
+
+// Admin: abrir modal agregar dispositivo
+async function openAddDeviceModal() {
+    const sel = document.getElementById('addDevUser');
+    sel.innerHTML = '<option value="">Selecciona un usuario…</option>';
+    try {
+        const users = await fetchAPI(`${API}/users/`) || [];
+        users.filter(u => u.username !== 'admin').forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = `${u.full_name} (@${u.username}) — ${u.approval_status === 'approved' ? '✓ Aprobado' : u.approval_status}`;
+            sel.appendChild(opt);
+        });
+    } catch { /* silent */ }
+    document.getElementById('addDevMac').value = '';
+    document.getElementById('addDevOs').value = '';
+    document.getElementById('addDevType').value = 'unknown';
+    document.getElementById('addDeviceModal').classList.add('show');
+}
+
+function closeAddDeviceModal() {
+    document.getElementById('addDeviceModal').classList.remove('show');
+}
+
+async function submitAddDevice() {
+    const userId   = document.getElementById('addDevUser').value;
+    const mac      = document.getElementById('addDevMac').value.trim().toUpperCase();
+    const devType  = document.getElementById('addDevType').value;
+    const osText   = document.getElementById('addDevOs').value.trim();
+
+    if (!userId) { toast('Selecciona un usuario.', 'err'); return; }
+    if (mac.length !== 17) { toast('Ingresa una MAC válida (XX:XX:XX:XX:XX:XX).', 'err'); return; }
+
+    try {
+        await fetchAPI(`${API}/devices/`, {
+            method: 'POST',
+            body: JSON.stringify({
+                user_id: parseInt(userId, 10),
+                mac_address: mac,
+                hostname: '',
+                device_type: devType,
+                os_type: osText || null,
+            })
+        });
+        toast('✅ Dispositivo agregado.', 'ok');
+        closeAddDeviceModal();
+        loadDevices();
+    } catch (e) {
+        const msg = e?.message || '';
+        if (msg.includes('409') || msg.includes('UNIQUE')) {
+            toast('❌ Esa MAC ya está registrada.', 'err');
+        } else {
+            toast('❌ Error al agregar dispositivo.', 'err');
+        }
+    }
+}
+
+// Usuario: agregar su propio dispositivo desde "Mi acceso"
+async function submitAddMyDevice() {
+    const mac     = document.getElementById('addMyDevMac').value.trim().toUpperCase();
+    const devType = document.getElementById('addMyDevType').value;
+
+    if (mac.length !== 17) { toast('Ingresa una MAC válida (XX:XX:XX:XX:XX:XX).', 'err'); return; }
+
+    try {
+        await fetchAPI(`${API}/auth/add-device`, {
+            method: 'POST',
+            body: JSON.stringify({
+                mac_address: mac,
+                device_info: JSON.stringify({ type: devType })
+            })
+        });
+        toast('✅ Dispositivo agregado. Conéctalo al WiFi para que obtenga acceso.', 'ok');
+        document.getElementById('addMyDeviceModal').classList.remove('show');
+        loadMyAccess();
+    } catch (e) {
+        const detail = String(e);
+        const errMap = {
+            'DEVICE_ALREADY_YOURS': 'Ese dispositivo ya está en tu cuenta.',
+            'DEVICE_TAKEN':         'Esa MAC ya está registrada para otro usuario.',
+            'MAC_RANDOMIZED':       'La MAC ingresada parece aleatoria. Usa la MAC física del dispositivo.',
+        };
+        const key = Object.keys(errMap).find(k => detail.includes(k));
+        toast('❌ ' + (errMap[key] || 'Error al agregar dispositivo.'), 'err');
+    }
+}
+
 // ── Messages / Consultas ──────────────────────────────────────────────────────
 let allMessages = [];
 let activeMsgId = null;
@@ -856,6 +957,11 @@ async function fetchAPI(url, options = {}) {
         }
     });
     if (res.status === 401) { handleLogout(); throw new Error('Unauthorized'); }
+    if (!res.ok) {
+        let detail = `HTTP_${res.status}`;
+        try { const d = await res.json(); detail = d.detail || detail; } catch { /* */ }
+        throw new Error(detail);
+    }
     return res.json();
 }
 

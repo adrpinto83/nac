@@ -691,6 +691,7 @@
                     <h1>Dispositivos</h1>
                     <p>Equipos registrados en la red</p>
                 </div>
+                <button class="btn btn-primary btn-sm admin-nav" onclick="openAddDeviceModal()">+ Agregar dispositivo</button>
             </div>
             <div class="section-card">
                 <div class="search-wrap">
@@ -880,6 +881,87 @@
         <div class="modal-footer">
             <button class="btn btn-ghost" onclick="closeApproveModal()">Cancelar</button>
             <button class="btn btn-success" id="approveConfirmBtn" onclick="confirmApprove()">✓ Confirmar aprobación</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal agregar dispositivo (admin) -->
+<div class="modal-overlay" id="addDeviceModal">
+    <div class="modal-box" style="max-width:480px">
+        <div class="modal-header">
+            <h3>Agregar dispositivo</h3>
+            <button class="modal-close" onclick="closeAddDeviceModal()">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <div>
+                <label class="modal-label" for="addDevUser">Usuario propietario</label>
+                <select class="modal-select" id="addDevUser" required></select>
+            </div>
+            <div>
+                <label class="modal-label" for="addDevMac">Dirección MAC</label>
+                <input type="text" id="addDevMac" class="modal-select"
+                    placeholder="Ej: AA:BB:CC:DD:EE:FF"
+                    style="padding:.65rem .85rem;font-family:monospace"
+                    maxlength="17" oninput="formatMacInput(this)">
+                <p class="modal-hint">Formato: XX:XX:XX:XX:XX:XX (mayúsculas)</p>
+            </div>
+            <div>
+                <label class="modal-label" for="addDevType">Tipo de dispositivo</label>
+                <select class="modal-select" id="addDevType">
+                    <option value="unknown">Desconocido</option>
+                    <option value="smartphone">Teléfono / Móvil</option>
+                    <option value="laptop">Laptop</option>
+                    <option value="desktop">Computadora de escritorio</option>
+                    <option value="tablet">Tableta</option>
+                    <option value="printer">Impresora</option>
+                    <option value="other">Otro</option>
+                </select>
+            </div>
+            <div>
+                <label class="modal-label" for="addDevOs">Sistema operativo <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label>
+                <input type="text" id="addDevOs" class="modal-select"
+                    placeholder="Ej: Android 14, Windows 11, iOS 17"
+                    style="padding:.65rem .85rem">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeAddDeviceModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitAddDevice()">Agregar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal agregar dispositivo propio (usuario desde Mi acceso) -->
+<div class="modal-overlay" id="addMyDeviceModal">
+    <div class="modal-box" style="max-width:460px">
+        <div class="modal-header">
+            <h3>Agregar mi dispositivo</h3>
+            <button class="modal-close" onclick="document.getElementById('addMyDeviceModal').classList.remove('show')">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <p style="font-size:.87rem;color:var(--text-muted)">Ingresa la dirección MAC del dispositivo que quieres agregar a tu cuenta.</p>
+            <div>
+                <label class="modal-label" for="addMyDevMac">Dirección MAC</label>
+                <input type="text" id="addMyDevMac" class="modal-select"
+                    placeholder="Ej: AA:BB:CC:DD:EE:FF"
+                    style="padding:.65rem .85rem;font-family:monospace"
+                    maxlength="17" oninput="formatMacInput(this)">
+                <p class="modal-hint">Formato: XX:XX:XX:XX:XX:XX</p>
+            </div>
+            <div>
+                <label class="modal-label" for="addMyDevType">Tipo de dispositivo</label>
+                <select class="modal-select" id="addMyDevType">
+                    <option value="smartphone">Teléfono / Móvil</option>
+                    <option value="laptop">Laptop</option>
+                    <option value="desktop">Computadora de escritorio</option>
+                    <option value="tablet">Tableta</option>
+                    <option value="other">Otro</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="document.getElementById('addMyDeviceModal').classList.remove('show')">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitAddMyDevice()">Agregar dispositivo</button>
         </div>
     </div>
 </div>
