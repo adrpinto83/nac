@@ -2,11 +2,13 @@
 """
 NAC Sync Agent — corre en WSL, sincroniza MACs aprobadas de Railway al router MikroTik.
 
-Aplica 4 reglas por MAC aprobado:
-  1. ip-binding type=bypassed  (hotspot tracking bypass)
-  2. hotspot user con mac-address (auto-login por MAC)
-  3. NAT dstnat return          (no redirigir al proxy)
-  4. forward filter accept      (pasar la cadena hs-unauth)
+Aplica 3 elementos por MAC aprobado:
+  1. hotspot user con mac-address (login.html hace auto-login via $(username))
+  2. forward filter accept before hs-unauth (tráfico saliente mientras auth=true)
+  3. forward established/related accept (tráfico de retorno desde internet)
+
+NO usa ip-binding bypassed ni dstnat RETURN porque eso impide que el hotspot
+intercepte el primer HTTP y autentique al dispositivo (auth=true via login.html).
 
 Uso:
   python3 sync_agent.py            # ejecutar una vez
@@ -35,38 +37,9 @@ ROUTER_HOST  = "192.168.88.1"
 ROUTER_PORT  = 80
 ROUTER_USER  = "admin"
 ROUTER_PASS  = "Mikrotik2025*"
-COMMENT      = "NAC:"       # Prefijo para identificar todas las reglas NAC
+COMMENT      = "NAC:"
 INTERVAL_S   = 60
 # ──────────────────────────────────────────────────────────────────────────────
-
-HOTSPOT_JUMP_ID = "*70"   # Actualizado dinámicamente en sync_once()
-FWD_UNAUTH_ID   = "*7D"   # Actualizado dinámicamente en sync_once()
-
-
-async def get_dynamic_ids(r: httpx.AsyncClient) -> tuple[str, str]:
-    """Descubre los IDs actuales del hotspot jump (dstnat) y hs-unauth jump (forward)."""
-    hs_id = HOTSPOT_JUMP_ID
-    fwd_id = FWD_UNAUTH_ID
-
-    nat_rules = await router_request("get", "/ip/firewall/nat", r)
-    for rule in (nat_rules if isinstance(nat_rules, list) else []):
-        if (rule.get("chain") == "dstnat"
-                and rule.get("action") == "jump"
-                and rule.get("dynamic") == "true"):
-            hs_id = rule.get(".id", hs_id)
-            break
-
-    flt_rules = await router_request("get", "/ip/firewall/filter", r)
-    for rule in (flt_rules if isinstance(flt_rules, list) else []):
-        if (rule.get("chain") == "forward"
-                and rule.get("action") == "jump"
-                and rule.get("jump-target") == "hs-unauth"
-                and rule.get("dynamic") == "true"):
-            fwd_id = rule.get(".id", fwd_id)
-            break
-
-    log.info(f"  IDs dinámicos: hotspot-jump={hs_id}  fwd-unauth={fwd_id}")
-    return hs_id, fwd_id
 
 
 async def get_approved_macs() -> list[str]:
@@ -92,6 +65,21 @@ def nac_comment(mac: str) -> str:
     return f"{COMMENT}{mac}"
 
 
+async def get_fwd_unauth_id(r: httpx.AsyncClient) -> str:
+    """Descubre el ID actual del forward hs-unauth jump (cambia con cada reinicio)."""
+    flt_rules = await router_request("get", "/ip/firewall/filter", r)
+    for rule in (flt_rules if isinstance(flt_rules, list) else []):
+        if (rule.get("chain") == "forward"
+                and rule.get("action") == "jump"
+                and rule.get("jump-target") == "hs-unauth"
+                and rule.get("dynamic") == "true"):
+            fwd_id = rule.get(".id")
+            log.info(f"  fwd-unauth jump ID: {fwd_id}")
+            return fwd_id, flt_rules
+    log.warning("  No se encontró fwd-unauth jump, usando *7D como fallback")
+    return "*7D", flt_rules
+
+
 async def sync_once(test_only: bool = False) -> bool:
     try:
         approved = await get_approved_macs()
@@ -105,31 +93,12 @@ async def sync_once(test_only: bool = False) -> bool:
                 log.info("Modo test — sin cambios")
                 return True
 
-            # Descubrir IDs dinámicos del hotspot
-            hotspot_jump_id, fwd_unauth_id = await get_dynamic_ids(r)
-
             target = {m.upper() for m in approved if m}
 
-            # ── ip-binding ────────────────────────────────────────────────────
-            bindings = await router_request("get", "/ip/hotspot/ip-binding", r)
-            if not isinstance(bindings, list):
-                bindings = []
-            nac_b = {b.get("mac-address", "").upper(): b.get(".id")
-                     for b in bindings if COMMENT in b.get("comment", "")}
+            # Descubrir ID del forward hs-unauth jump
+            fwd_unauth_id, flt_rules = await get_fwd_unauth_id(r)
 
-            for mac in target - nac_b.keys():
-                await router_request("put", "/ip/hotspot/ip-binding", r, json={
-                    "mac-address": mac,
-                    "type": "bypassed",
-                    "comment": nac_comment(mac)
-                })
-                log.info(f"  +binding: {mac}")
-            for mac, bid in nac_b.items():
-                if mac not in target:
-                    await router_request("delete", f"/ip/hotspot/ip-binding/{bid}", r)
-                    log.info(f"  -binding: {mac}")
-
-            # ── hotspot users (MAC auto-login) ────────────────────────────────
+            # ── Hotspot users (MAC auto-login via login.html) ──────────────────
             users = await router_request("get", "/ip/hotspot/user", r)
             if not isinstance(users, list):
                 users = []
@@ -151,34 +120,7 @@ async def sync_once(test_only: bool = False) -> bool:
                     await router_request("delete", f"/ip/hotspot/user/{uid}", r)
                     log.info(f"  -hs-user: {mac}")
 
-            # ── NAT dstnat return (bypass proxy redirect) ─────────────────────
-            nat_rules = await router_request("get", "/ip/firewall/nat", r)
-            if not isinstance(nat_rules, list):
-                nat_rules = []
-            nac_nat = {
-                rule.get("src-mac-address", "").upper(): rule.get(".id")
-                for rule in nat_rules
-                if rule.get("chain") == "dstnat"
-                and COMMENT in rule.get("comment", "")
-                and rule.get("action") == "return"
-            }
-
-            for mac in target - nac_nat.keys():
-                await router_request("put", "/ip/firewall/nat", r, json={
-                    "chain": "dstnat",
-                    "src-mac-address": mac,
-                    "action": "return",
-                    "comment": nac_comment(mac),
-                    "place-before": hotspot_jump_id
-                })
-                log.info(f"  +nat-bypass: {mac}")
-            for mac, nid in nac_nat.items():
-                if mac not in target:
-                    await router_request("delete", f"/ip/firewall/nat/{nid}", r)
-                    log.info(f"  -nat-bypass: {mac}")
-
-            # ── Forward filter accept por MAC (before hs-unauth jump) ────────
-            flt_rules = await router_request("get", "/ip/firewall/filter", r)
+            # ── Forward filter accept por MAC (before hs-unauth jump) ──────────
             if not isinstance(flt_rules, list):
                 flt_rules = []
             nac_flt = {
@@ -187,7 +129,7 @@ async def sync_once(test_only: bool = False) -> bool:
                 if rule.get("chain") == "forward"
                 and COMMENT in rule.get("comment", "")
                 and rule.get("action") == "accept"
-                and rule.get("src-mac-address", "")  # solo reglas con MAC
+                and rule.get("src-mac-address", "")
             }
 
             for mac in target - nac_flt.keys():
@@ -204,9 +146,7 @@ async def sync_once(test_only: bool = False) -> bool:
                     await router_request("delete", f"/ip/firewall/filter/{fid}", r)
                     log.info(f"  -fwd-accept: {mac}")
 
-            # ── Forward established/related (tráfico de retorno desde internet)
-            # Acepta respuestas inbound ANTES de hs-unauth, que solo bloquea NEW.
-            # Comentario sin "NAC:" para que este bloque no la gestione ni borre.
+            # ── Forward established/related (tráfico de retorno desde internet) ─
             ESTAB_COMMENT = "bypass-established"
             has_estab = any(
                 rule.get("chain") == "forward"
@@ -216,7 +156,6 @@ async def sync_once(test_only: bool = False) -> bool:
                 for rule in flt_rules
             )
             if not has_estab:
-                # Verificar en la lista actualizada (puede que la tenga otro sync)
                 flt_rules2 = await router_request("get", "/ip/firewall/filter", r)
                 has_estab = any(
                     rule.get("chain") == "forward"
@@ -234,6 +173,21 @@ async def sync_once(test_only: bool = False) -> bool:
                         "place-before": fwd_unauth_id
                     })
                     log.info("  +fwd-established: bypass-established rule added")
+
+            # ── Limpiar ip-binding y dstnat RETURN que hayan quedado de versiones anteriores ──
+            bindings = await router_request("get", "/ip/hotspot/ip-binding", r)
+            for b in (bindings if isinstance(bindings, list) else []):
+                if COMMENT in b.get("comment", ""):
+                    await router_request("delete", f"/ip/hotspot/ip-binding/{b.get('.id')}", r)
+                    log.info(f"  -binding (legacy): {b.get('mac-address')}")
+
+            nat_rules = await router_request("get", "/ip/firewall/nat", r)
+            for rule in (nat_rules if isinstance(nat_rules, list) else []):
+                if (rule.get("chain") == "dstnat"
+                        and COMMENT in rule.get("comment", "")
+                        and rule.get("action") == "return"):
+                    await router_request("delete", f"/ip/firewall/nat/{rule.get('.id')}", r)
+                    log.info(f"  -nat-return (legacy): {rule.get('src-mac-address')}")
 
             log.info("Sync completo")
         return True
