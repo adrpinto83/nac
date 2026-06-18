@@ -127,42 +127,50 @@ if STATIC_DIR.exists():
                     )
                     device = await cursor.fetchone()
                 if device:
-                    # Determinar la URL de login del hotspot (puerto 64872)
+                    # Construir URL de login con GET params (hotspot acepta GET)
+                    # Usamos meta-refresh en lugar de form POST (meta-refresh no es
+                    # bloqueado por mixed-content en Android captive portal WebView)
                     if link:
-                        login_url = link
+                        base_login = link
                     elif ip.startswith("192.168.101."):
-                        login_url = "http://192.168.101.1:64872/login"
+                        base_login = "http://192.168.101.1:64872/login"
                     else:
-                        login_url = "http://192.168.100.1:64872/login"
+                        base_login = "http://192.168.100.1:64872/login"
 
                     redirect_to = dst or "https://www.google.com"
                     username = mac.lower().replace(":", "")
+                    from urllib.parse import quote
+                    login_url = (
+                        f"{base_login}"
+                        f"?username={quote(username)}"
+                        f"&password="
+                        f"&dst={quote(redirect_to)}"
+                    )
 
                     return HTMLResponse(content=f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta http-equiv="refresh" content="1;url={login_url}">
 <title>Acceso autorizado</title>
 <style>
 body{{font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;
 background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;min-height:100vh;
 display:flex;align-items:center;justify-content:center;}}
 .box{{background:rgba(255,255,255,.15);border-radius:16px;padding:40px;max-width:400px;width:100%;}}
-h2{{margin-bottom:12px;font-size:1.5rem;}}
-p{{opacity:.85;font-size:.9rem;}}
+h2{{margin-bottom:12px;font-size:1.5rem;}}p{{opacity:.85;font-size:.9rem;}}
+a{{color:#fff;opacity:.7;font-size:.85rem;}}
 </style>
 </head>
 <body>
 <div class="box">
 <h2>&#10003; Acceso autorizado</h2>
 <p>Tu dispositivo está aprobado. Conectando a internet...</p>
+<p><a href="{login_url}">Haz clic aquí si no rediriges automáticamente</a></p>
 </div>
-<form id="hs" method="POST" action="{login_url}">
-<input type="hidden" name="username" value="{username}">
-<input type="hidden" name="password" value="">
-<input type="hidden" name="dst" value="{redirect_to}">
-</form>
-<script>setTimeout(function(){{document.getElementById('hs').submit();}},800);</script>
+<script>
+setTimeout(function(){{window.location.replace("{login_url}");}},800);
+</script>
 </body>
 </html>""")
             except Exception as e:
