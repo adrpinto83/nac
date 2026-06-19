@@ -1,0 +1,17 @@
+[Unit]
+Description=NAC MikroTik Sync Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=adrpinto
+WorkingDirectory=/home/adrpinto/miktotik
+ExecStart=/usr/bin/python3 /home/adrpinto/miktotik/sync_agent.py --loop
+Restart=always
+RestartSec=30
+StandardOutput=append:/home/adrpinto/miktotik/logs/sync_agent.log
+StandardError=append:/home/adrpinto/miktotik/logs/sync_agent.log
+
+[Install]
+WantedBy=multi-user.target

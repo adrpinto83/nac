@@ -255,13 +255,19 @@ async def get_authenticated_users(authorization: Optional[str] = Header(None)):
         )
 
 
-# ─── ENDPOINT PÚBLICO: el router lo jala cada 60 s ───────────────────────────
+# ─── ENDPOINT PÚBLICO: el router lo descarga y ejecuta cada 60 s ─────────────
 
 @router.get("/pull-script", response_class=PlainTextResponse)
 async def pull_script(key: str = Query(default="")):
     """
-    El router MikroTik llama a este endpoint y recibe un script .rsc listo
-    para importar. Configura ip-binding type=bypassed para cada MAC aprobada.
+    El router MikroTik descarga este script RouterOS y lo importa cada minuto.
+    No requiere ningún PC corriendo.
+
+    Sincroniza:
+      - hotspot users (MAC como nombre, para auto-login)
+      - forward filter accept rules (tráfico saliente)
+      - bypass-established rule (tráfico de retorno)
+
     Protegido con NAC_SYNC_KEY.
     """
     if key != SYNC_KEY:
@@ -270,7 +276,7 @@ async def pull_script(key: str = Query(default="")):
     now = datetime.utcnow().isoformat()
     db = await get_db()
     cursor = await db.execute(
-        """SELECT d.mac_address, u.username
+        """SELECT d.mac_address, u.download_mbps, u.upload_mbps
            FROM devices d
            JOIN users u ON d.user_id = u.id
            WHERE u.approval_status = 'approved'
@@ -281,18 +287,116 @@ async def pull_script(key: str = Query(default="")):
     rows = await cursor.fetchall()
     await db.close()
 
-    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    lines = [
-        f"# NAC Sync  {ts} UTC  ({len(rows)} dispositivos aprobados)",
-        "/ip hotspot ip-binding remove [find comment~\"NAC:\"]",
-    ]
-    for mac, username in rows:
+    # {MAC_UPPER: (download_mbps, upload_mbps)}
+    devices: dict[str, tuple] = {}
+    for mac, dl, ul in rows:
         if mac:
-            safe = (username or "user").replace('"', '')
-            lines.append(
-                f'/ip hotspot ip-binding add mac-address="{mac}" '
-                f'type=bypassed comment="NAC:{safe}"'
-            )
+            devices[mac.upper()] = (dl, ul)
+
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    macs_str = ", ".join(devices.keys()) if devices else "(ninguno)"
+
+    lines = [
+        f"# NAC-SYNC  {ts}  |  {len(devices)} dispositivos aprobados",
+        f"# MACs: {macs_str}",
+        "",
+        "# ── Hotspot users ──────────────────────────────────────────────────",
+    ]
+
+    # Generar condición para remover usuarios que ya no están aprobados
+    if devices:
+        not_in = " and ".join(f'$name != "{mac}"' for mac in devices)
+    else:
+        not_in = "true"
+
+    lines += [
+        ":foreach u in=[/ip/hotspot/user find comment~\"NAC:\"] do={",
+        "    :local name [/ip/hotspot/user get $u name]",
+        f"    :if ({not_in}) do={{",
+        "        /ip/hotspot/user remove $u",
+        '        :log info ("NAC-SYNC: -user " . $name)',
+        "    }",
+        "}",
+        "",
+    ]
+
+    for mac, (dl, ul) in devices.items():
+        rate = ""
+        if dl or ul:
+            d = f"{dl}M" if dl else "0"
+            u = f"{ul}M" if ul else "0"
+            rate = f"{d}/{u}"
+        rate_attr = f' rate-limit="{rate}"' if rate else ""
+        lines += [
+            f':if ([:len [/ip/hotspot/user find name="{mac}"]] = 0) do={{',
+            f'    /ip/hotspot/user add name="{mac}" profile=default password="" comment="NAC:{mac}"{rate_attr}',
+            f'    :log info "NAC-SYNC: +user {mac}"',
+            "}",
+        ]
+        if rate:
+            lines += [
+                f'    :foreach u in=[/ip/hotspot/user find name="{mac}"] do={{',
+                f'        :if ([/ip/hotspot/user get $u rate-limit] != "{rate}") do={{',
+                f'            /ip/hotspot/user set $u rate-limit="{rate}"',
+                f'            :log info "NAC-SYNC: ~rate {mac} {rate}"',
+                "        }",
+                "    }",
+            ]
+
+    lines += [
+        "",
+        "# ── Forward filter rules ────────────────────────────────────────────",
+        ":local fwdId \"\"",
+        ":foreach r in=[/ip/firewall/filter find chain=forward action=jump jump-target=hs-unauth dynamic=yes] do={",
+        "    :set fwdId [/ip/firewall/filter get $r .id]",
+        "}",
+        "",
+    ]
+
+    if devices:
+        fwd_not_in = " and ".join(
+            f'[:toupper $mac] != "{mac}"' for mac in devices
+        )
+    else:
+        fwd_not_in = "true"
+
+    lines += [
+        ":foreach r in=[/ip/firewall/filter find chain=forward comment~\"NAC:\" action=accept] do={",
+        "    :local mac [/ip/firewall/filter get $r src-mac-address]",
+        f"    :if ({fwd_not_in}) do={{",
+        "        /ip/firewall/filter remove $r",
+        '        :log info ("NAC-SYNC: -fwd " . $mac)',
+        "    }",
+        "}",
+        "",
+    ]
+
+    for mac in devices:
+        lines += [
+            f':if ([:len [/ip/firewall/filter find chain=forward src-mac-address="{mac}" action=accept]] = 0) do={{',
+            f'    :if ($fwdId != "") do={{',
+            f'        /ip/firewall/filter add chain=forward src-mac-address="{mac}" action=accept comment="NAC:{mac}" place-before=$fwdId',
+            f'    }} else={{',
+            f'        /ip/firewall/filter add chain=forward src-mac-address="{mac}" action=accept comment="NAC:{mac}"',
+            f'    }}',
+            f'    :log info "NAC-SYNC: +fwd {mac}"',
+            "}",
+        ]
+
+    lines += [
+        "",
+        "# ── Bypass established/related ──────────────────────────────────────",
+        ':if ([:len [/ip/firewall/filter find chain=forward comment="bypass-established"]] = 0) do={',
+        '    :if ($fwdId != "") do={',
+        '        /ip/firewall/filter add chain=forward connection-state=established,related action=accept comment="bypass-established" place-before=$fwdId',
+        '    } else={',
+        '        /ip/firewall/filter add chain=forward connection-state=established,related action=accept comment="bypass-established"',
+        '    }',
+        '    :log info "NAC-SYNC: +bypass-established"',
+        "}",
+        "",
+        ':log info "NAC-SYNC: completo"',
+    ]
 
     return "\n".join(lines) + "\n"
 

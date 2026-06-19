@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NAC Sync Agent — corre en WSL, sincroniza MACs aprobadas de Railway al router MikroTik.
+NAC Sync Agent — corre en WSL/Windows, sincroniza MACs aprobadas de Railway al router MikroTik.
 
 Aplica 3 elementos por MAC aprobado:
   1. hotspot user con mac-address (login.html hace auto-login via $(username))
@@ -14,10 +14,12 @@ Uso:
   python3 sync_agent.py            # ejecutar una vez
   python3 sync_agent.py --loop     # loop cada 60 segundos
   python3 sync_agent.py --test     # probar conectividad sin cambios
+  python3 sync_agent.py --fix-ip 192.168.100.6   # forzar fix para un IP específico
 """
 
 import sys
 import time
+import socket
 import httpx
 import asyncio
 import logging
@@ -39,7 +41,17 @@ ROUTER_USER  = "admin"
 ROUTER_PASS  = "Mikrotik2025*"
 COMMENT      = "NAC:"
 INTERVAL_S   = 60
-# ──────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def can_reach_router() -> bool:
+    """Verifica si el router es accesible antes de intentar conectar."""
+    try:
+        sock = socket.create_connection((ROUTER_HOST, ROUTER_PORT), timeout=3)
+        sock.close()
+        return True
+    except OSError:
+        return False
 
 
 async def get_approved_devices() -> list[dict]:
@@ -106,7 +118,112 @@ async def get_fwd_unauth_id(r: httpx.AsyncClient) -> str:
     return "*7D", flt_rules
 
 
+async def fix_device_by_ip(ip: str) -> bool:
+    """
+    Busca la MAC en la tabla ARP/hotspot del router para un IP dado
+    y aplica hotspot user + forward accept rule si falta.
+    """
+    if not can_reach_router():
+        log.error(f"Router {ROUTER_HOST} no accesible. Verifica la red.")
+        return False
+
+    auth = (ROUTER_USER, ROUTER_PASS)
+    try:
+        async with httpx.AsyncClient(auth=auth, verify=False, timeout=10) as r:
+            mac = None
+
+            # Buscar en hotspot hosts
+            hosts = await router_request("get", "/ip/hotspot/host", r)
+            for h in (hosts if isinstance(hosts, list) else []):
+                if h.get("address") == ip:
+                    mac = h.get("mac-address", "").upper()
+                    break
+
+            # Buscar en ARP si no se encontró
+            if not mac:
+                arps = await router_request("get", "/ip/arp", r)
+                for a in (arps if isinstance(arps, list) else []):
+                    if a.get("address") == ip:
+                        mac = a.get("mac-address", "").upper()
+                        break
+
+            if not mac:
+                log.error(f"No se encontró MAC para IP {ip}")
+                log.info("Dispositivos en hotspot host:")
+                for h in (hosts if isinstance(hosts, list) else []):
+                    log.info(f"  {h.get('address')} → {h.get('mac-address')} auth={h.get('authorized')}")
+                return False
+
+            log.info(f"IP {ip} → MAC {mac}")
+
+            fwd_unauth_id, flt_rules = await get_fwd_unauth_id(r)
+
+            # Hotspot user
+            users = await router_request("get", "/ip/hotspot/user", r)
+            exists = any(u.get("name", "").upper() == mac for u in (users if isinstance(users, list) else []))
+            if not exists:
+                await router_request("put", "/ip/hotspot/user", r, json={
+                    "name": mac, "profile": "default", "password": "",
+                    "comment": nac_comment(mac),
+                })
+                log.info(f"  FIX: +hs-user {mac}")
+            else:
+                log.info(f"  OK: hs-user {mac} ya existe")
+
+            # Forward accept
+            has_fwd = any(
+                rule.get("chain") == "forward"
+                and rule.get("src-mac-address", "").upper() == mac
+                and rule.get("action") == "accept"
+                for rule in (flt_rules if isinstance(flt_rules, list) else [])
+            )
+            if not has_fwd:
+                body = {"chain": "forward", "src-mac-address": mac, "action": "accept",
+                        "comment": nac_comment(mac)}
+                if fwd_unauth_id:
+                    body["place-before"] = fwd_unauth_id
+                await router_request("put", "/ip/firewall/filter", r, json=body)
+                log.info(f"  FIX: +fwd-accept {mac}")
+            else:
+                log.info(f"  OK: fwd-accept {mac} ya existe")
+
+            # Established/related
+            ESTAB_COMMENT = "bypass-established"
+            has_estab = any(
+                rule.get("chain") == "forward"
+                and "established" in rule.get("connection-state", "")
+                and rule.get("comment", "") == ESTAB_COMMENT
+                for rule in (flt_rules if isinstance(flt_rules, list) else [])
+            )
+            if not has_estab:
+                body = {"chain": "forward", "connection-state": "established,related",
+                        "action": "accept", "comment": ESTAB_COMMENT}
+                if fwd_unauth_id:
+                    body["place-before"] = fwd_unauth_id
+                await router_request("put", "/ip/firewall/filter", r, json=body)
+                log.info("  FIX: +bypass-established")
+
+            # Limpiar host stale no-autorizado
+            hosts2 = await router_request("get", "/ip/hotspot/host", r)
+            for h in (hosts2 if isinstance(hosts2, list) else []):
+                if h.get("mac-address", "").upper() == mac and h.get("authorized") == "false":
+                    await router_request("delete", f"/ip/hotspot/host/{h.get('.id')}", r)
+                    log.info(f"  FIX: -stale host (no autorizado) {mac}")
+
+            log.info(f"Fix aplicado. El dispositivo {ip} ({mac}) puede reconectarse.")
+            return True
+
+    except Exception as e:
+        log.exception(f"Error en fix-ip: {e}")
+        return False
+
+
 async def sync_once(test_only: bool = False) -> bool:
+    if not can_reach_router():
+        log.warning(f"Router {ROUTER_HOST} no accesible — saltando ciclo. "
+                    f"Verifica que WSL tenga ruta a {ROUTER_HOST}.")
+        return False
+
     try:
         devices = await get_approved_devices()
         auth = (ROUTER_USER, ROUTER_PASS)
@@ -273,12 +390,27 @@ async def main():
     parser = argparse.ArgumentParser(description="NAC Sync Agent")
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--test", action="store_true")
+    parser.add_argument("--fix-ip", metavar="IP",
+                        help="Forzar sincronización para el dispositivo con este IP")
     args = parser.parse_args()
 
-    if args.loop:
+    if args.fix_ip:
+        ok = await fix_device_by_ip(args.fix_ip)
+        sys.exit(0 if ok else 1)
+    elif args.loop:
         log.info(f"Loop cada {INTERVAL_S}s — Ctrl+C para detener")
+        consecutive_failures = 0
         while True:
-            await sync_once(test_only=args.test)
+            ok = await sync_once(test_only=args.test)
+            if not ok:
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    log.error(
+                        f"Router inaccesible por {consecutive_failures} ciclos. "
+                        f"Asegúrate de que WSL/Windows tenga ruta a {ROUTER_HOST}."
+                    )
+            else:
+                consecutive_failures = 0
             await asyncio.sleep(INTERVAL_S)
     else:
         ok = await sync_once(test_only=args.test)
