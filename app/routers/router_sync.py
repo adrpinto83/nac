@@ -321,7 +321,7 @@ async def pull_script(key: str = Query(default="")):
         '/ip/firewall/filter remove [find chain=forward comment~"NAC:" action=accept]',
         ":local fid \"\"",
         ":foreach r in=[/ip/firewall/filter find chain=forward action=jump "
-        'jump-target=hs-unauth dynamic=yes] do={ :set fid [/ip/firewall/filter get $r .id] }',
+        'jump-target=hs-unauth dynamic=yes] do={ :set fid $r }',
     ]
 
     for mac in devices:
