@@ -294,30 +294,13 @@ async def pull_script(key: str = Query(default="")):
             devices[mac.upper()] = (dl, ul)
 
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    macs_str = ", ".join(devices.keys()) if devices else "(ninguno)"
 
+    # Script plano (sin loops complejos) para máxima compatibilidad con /import
     lines = [
-        f"# NAC-SYNC  {ts}  |  {len(devices)} dispositivos aprobados",
-        f"# MACs: {macs_str}",
+        f"# NAC-SYNC {ts} | {len(devices)} dispositivos",
         "",
-        "# ── Hotspot users ──────────────────────────────────────────────────",
-    ]
-
-    # Generar condición para remover usuarios que ya no están aprobados
-    if devices:
-        not_in = " and ".join(f'$name != "{mac}"' for mac in devices)
-    else:
-        not_in = "true"
-
-    lines += [
-        ":foreach u in=[/ip/hotspot/user find comment~\"NAC:\"] do={",
-        "    :local name [/ip/hotspot/user get $u name]",
-        f"    :if ({not_in}) do={{",
-        "        /ip/hotspot/user remove $u",
-        '        :log info ("NAC-SYNC: -user " . $name)',
-        "    }",
-        "}",
-        "",
+        "# Hotspot users: eliminar obsoletos y re-agregar aprobados",
+        '/ip/hotspot/user remove [find comment~"NAC:"]',
     ]
 
     for mac, (dl, ul) in devices.items():
@@ -327,73 +310,37 @@ async def pull_script(key: str = Query(default="")):
             u = f"{ul}M" if ul else "0"
             rate = f"{d}/{u}"
         rate_attr = f' rate-limit="{rate}"' if rate else ""
-        lines += [
-            f':if ([:len [/ip/hotspot/user find name="{mac}"]] = 0) do={{',
-            f'    /ip/hotspot/user add name="{mac}" profile=default password="" comment="NAC:{mac}"{rate_attr}',
-            f'    :log info "NAC-SYNC: +user {mac}"',
-            "}",
-        ]
-        if rate:
-            lines += [
-                f'    :foreach u in=[/ip/hotspot/user find name="{mac}"] do={{',
-                f'        :if ([/ip/hotspot/user get $u rate-limit] != "{rate}") do={{',
-                f'            /ip/hotspot/user set $u rate-limit="{rate}"',
-                f'            :log info "NAC-SYNC: ~rate {mac} {rate}"',
-                "        }",
-                "    }",
-            ]
-
-    lines += [
-        "",
-        "# ── Forward filter rules ────────────────────────────────────────────",
-        ":local fwdId \"\"",
-        ":foreach r in=[/ip/firewall/filter find chain=forward action=jump jump-target=hs-unauth dynamic=yes] do={",
-        "    :set fwdId [/ip/firewall/filter get $r .id]",
-        "}",
-        "",
-    ]
-
-    if devices:
-        fwd_not_in = " and ".join(
-            f'[:toupper $mac] != "{mac}"' for mac in devices
+        lines.append(
+            f':do {{ /ip/hotspot/user add name="{mac}" profile=default password="" '
+            f'comment="NAC:{mac}"{rate_attr} }} on-error={{}}'
         )
-    else:
-        fwd_not_in = "true"
 
     lines += [
-        ":foreach r in=[/ip/firewall/filter find chain=forward comment~\"NAC:\" action=accept] do={",
-        "    :local mac [/ip/firewall/filter get $r src-mac-address]",
-        f"    :if ({fwd_not_in}) do={{",
-        "        /ip/firewall/filter remove $r",
-        '        :log info ("NAC-SYNC: -fwd " . $mac)',
-        "    }",
-        "}",
         "",
+        "# Forward filter rules: eliminar obsoletos y re-agregar aprobados",
+        '/ip/firewall/filter remove [find chain=forward comment~"NAC:" action=accept]',
+        ":local fid \"\"",
+        ":foreach r in=[/ip/firewall/filter find chain=forward action=jump "
+        'jump-target=hs-unauth dynamic=yes] do={ :set fid [/ip/firewall/filter get $r .id] }',
     ]
 
     for mac in devices:
-        lines += [
-            f':if ([:len [/ip/firewall/filter find chain=forward src-mac-address="{mac}" action=accept]] = 0) do={{',
-            f'    :if ($fwdId != "") do={{',
-            f'        /ip/firewall/filter add chain=forward src-mac-address="{mac}" action=accept comment="NAC:{mac}" place-before=$fwdId',
-            f'    }} else={{',
-            f'        /ip/firewall/filter add chain=forward src-mac-address="{mac}" action=accept comment="NAC:{mac}"',
-            f'    }}',
-            f'    :log info "NAC-SYNC: +fwd {mac}"',
-            "}",
-        ]
+        lines.append(
+            f':do {{ /ip/firewall/filter add chain=forward src-mac-address="{mac}" '
+            f'action=accept comment="NAC:{mac}" place-before=$fid }} '
+            f'on-error={{ :do {{ /ip/firewall/filter add chain=forward '
+            f'src-mac-address="{mac}" action=accept comment="NAC:{mac}" }} on-error={{}} }}'
+        )
 
     lines += [
         "",
-        "# ── Bypass established/related ──────────────────────────────────────",
-        ':if ([:len [/ip/firewall/filter find chain=forward comment="bypass-established"]] = 0) do={',
-        '    :if ($fwdId != "") do={',
-        '        /ip/firewall/filter add chain=forward connection-state=established,related action=accept comment="bypass-established" place-before=$fwdId',
-        '    } else={',
-        '        /ip/firewall/filter add chain=forward connection-state=established,related action=accept comment="bypass-established"',
-        '    }',
-        '    :log info "NAC-SYNC: +bypass-established"',
-        "}",
+        "# Bypass established/related",
+        '/ip/firewall/filter remove [find chain=forward comment="bypass-established"]',
+        ':do { /ip/firewall/filter add chain=forward connection-state=established,related '
+        'action=accept comment="bypass-established" place-before=$fid } '
+        'on-error={ :do { /ip/firewall/filter add chain=forward '
+        'connection-state=established,related action=accept comment="bypass-established" '
+        '} on-error={} }',
         "",
         ':log info "NAC-SYNC: completo"',
     ]
