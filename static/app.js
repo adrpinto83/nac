@@ -89,6 +89,7 @@ function navigateTo(page) {
     if (page === 'messages')     { closeMsgDetail(); loadMessages(); }
     if (page === 'profile')      loadProfile();
     if (page === 'myAccess')     loadMyAccess();
+    if (page === 'traffic')      loadTraffic();
 }
 
 function toast(msg, type = 'ok') {
@@ -474,6 +475,7 @@ function accessActions(u) {
         btns.push(`<button class="btn btn-danger  btn-sm" onclick="rejectUser(${u.id})">✕ Rechazar</button>`);
     } else if (s === 'approved') {
         btns.push(`<button class="btn btn-warning btn-sm" onclick="blockUser(${u.id},'${escAttr(u.full_name)}')">⊘ Bloquear</button>`);
+        btns.push(`<button class="btn btn-ghost btn-sm" onclick="openBlocksModal(${u.id},'${escAttr(u.full_name)}')">🚫 Sitios</button>`);
     } else {
         btns.push(`<button class="btn btn-success btn-sm" onclick="reactivateUser(${u.id},'${escAttr(u.full_name)}')">↺ Reactivar</button>`);
     }
@@ -1014,4 +1016,114 @@ async function fetchAPI(url, options = {}) {
 document.addEventListener('click', e => {
     const overlay = document.getElementById('approveModal');
     if (e.target === overlay) closeApproveModal();
+});
+
+// ── CONSUMO DE ANCHO DE BANDA ─────────────────────────────────────────────────
+
+function fmtBytes(b) {
+    if (!b || b === 0) return '0 B';
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+    if (b >= 1048576)    return (b / 1048576).toFixed(2) + ' MB';
+    if (b >= 1024)       return (b / 1024).toFixed(1) + ' KB';
+    return b + ' B';
+}
+
+async function loadTraffic() {
+    const tbody = document.getElementById('trafficTbody');
+    const badge = document.getElementById('trafficOnlineBadge');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">Cargando…</td></tr>';
+    try {
+        const data = await fetchAPI(`${API}/traffic/users`);
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">Sin datos de consumo</td></tr>';
+            return;
+        }
+        const online = data.filter(r => r.online).length;
+        badge.textContent = `${online} en línea ahora`;
+        tbody.innerHTML = data.map(r => `
+            <tr>
+                <td>
+                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${r.online ? '#22c55e' : '#d1d5db'};margin-right:.4rem"></span>
+                    ${r.online ? '<strong>En línea</strong>' : '<span style="color:var(--text-muted)">Offline</span>'}
+                </td>
+                <td>
+                    <div style="font-weight:600">${escHtml(r.full_name)}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted)">${escHtml(r.username)}</div>
+                </td>
+                <td style="font-family:monospace;font-size:.85rem">${r.ip_address || '—'}</td>
+                <td style="font-size:.85rem;color:var(--text-muted)">${r.uptime || '—'}</td>
+                <td style="text-align:right;color:#3b82f6;font-weight:500">${fmtBytes(r.bytes_down)}</td>
+                <td style="text-align:right;color:#10b981;font-weight:500">${fmtBytes(r.bytes_up)}</td>
+                <td style="text-align:right;font-weight:600">${fmtBytes(r.bytes_total)}</td>
+            </tr>`).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:#ef4444">Error: ${escHtml(e.message)}</td></tr>`;
+    }
+}
+
+// ── BLOQUEOS DE SITIOS POR USUARIO ───────────────────────────────────────────
+
+let _blocksUserId = null;
+
+function openBlocksModal(userId, name) {
+    _blocksUserId = userId;
+    document.getElementById('blocksUserLabel').textContent = `Usuario: ${name}`;
+    document.getElementById('blockDomainInput').value = '';
+    document.getElementById('blocksModal').classList.add('show');
+    loadUserBlocks();
+}
+
+function closeBlocksModal() {
+    document.getElementById('blocksModal').classList.remove('show');
+    _blocksUserId = null;
+}
+
+async function loadUserBlocks() {
+    const container = document.getElementById('blocksList');
+    container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:1rem">Cargando…</div>';
+    try {
+        const data = await fetchAPI(`${API}/blocks/user/${_blocksUserId}`);
+        if (!data.length) {
+            container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:1rem;font-size:.88rem">Sin bloqueos configurados</div>';
+            return;
+        }
+        container.innerHTML = data.map(b => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem .65rem;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px">
+                <span style="font-family:monospace;font-size:.88rem;color:#991b1b">🚫 ${escHtml(b.domain)}</span>
+                <button class="btn btn-ghost btn-sm" style="padding:2px 8px;color:#dc2626;border-color:#fca5a5" onclick="deleteBlock(${b.id})">✕</button>
+            </div>`).join('');
+    } catch (e) {
+        container.innerHTML = `<div style="text-align:center;color:#ef4444;padding:1rem;font-size:.88rem">Error: ${escHtml(e.message)}</div>`;
+    }
+}
+
+async function addBlock() {
+    const input = document.getElementById('blockDomainInput');
+    const domain = input.value.trim();
+    if (!domain) return;
+    try {
+        const res = await fetchAPI(`${API}/blocks/user/${_blocksUserId}`, {
+            method: 'POST',
+            body: JSON.stringify({ domain }),
+        });
+        toast(res.message || 'Bloqueo agregado');
+        input.value = '';
+        await loadUserBlocks();
+    } catch (e) {
+        toast(`Error: ${e.message}`, 'error');
+    }
+}
+
+async function deleteBlock(blockId) {
+    try {
+        const res = await fetchAPI(`${API}/blocks/${blockId}`, { method: 'DELETE' });
+        toast(res.message || 'Bloqueo eliminado');
+        await loadUserBlocks();
+    } catch (e) {
+        toast(`Error: ${e.message}`, 'error');
+    }
+}
+
+document.addEventListener('click', e => {
+    if (e.target === document.getElementById('blocksModal')) closeBlocksModal();
 });

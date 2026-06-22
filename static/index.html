@@ -549,6 +549,9 @@
             <button onclick="navigateTo('devices')" class="nav-item admin-nav" data-page="devices">
                 <span class="nav-icon">📱</span> Dispositivos
             </button>
+            <button onclick="navigateTo('traffic')" class="nav-item admin-nav" data-page="traffic">
+                <span class="nav-icon">📶</span> Consumo
+            </button>
             <button onclick="navigateTo('messages')" class="nav-item" data-page="messages" id="navMessages">
                 <span class="nav-icon">💬</span> Consultas
                 <span class="nav-badge" id="msgBadge" style="display:none">0</span>
@@ -730,6 +733,41 @@
             </div>
             <div id="myAccessContent">
                 <div style="padding:2rem;text-align:center;color:var(--text-muted)">Cargando…</div>
+            </div>
+        </div>
+
+        <!-- CONSUMO DE ANCHO DE BANDA -->
+        <div id="trafficPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Consumo de ancho de banda</h1>
+                    <p>Tráfico por cliente (sesión actual + histórico)</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="loadTraffic()">🔄 Actualizar</button>
+            </div>
+            <div class="section-card">
+                <div class="section-card-header">
+                    Consumo por usuario
+                    <span id="trafficOnlineBadge" style="font-size:.75rem;font-weight:500;color:var(--text-muted)"></span>
+                </div>
+                <div class="table-wrap">
+                    <table id="trafficTable">
+                        <thead>
+                            <tr>
+                                <th>Estado</th>
+                                <th>Usuario</th>
+                                <th>IP actual</th>
+                                <th>Tiempo conectado</th>
+                                <th style="text-align:right">↓ Descarga</th>
+                                <th style="text-align:right">↑ Subida</th>
+                                <th style="text-align:right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trafficTbody">
+                            <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -1029,9 +1067,38 @@
     </div>
 </div>
 
+<!-- Modal: Bloqueos de sitios por usuario -->
+<div class="modal-overlay" id="blocksModal">
+    <div class="modal-box" style="max-width:520px">
+        <div class="modal-header">
+            <h3>🚫 Bloqueos de sitios</h3>
+            <button class="modal-close" onclick="closeBlocksModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p id="blocksUserLabel" style="margin-bottom:1rem;color:var(--text-muted);font-size:.9rem"></p>
+            <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+                <input type="text" id="blockDomainInput" class="modal-select"
+                       placeholder="ej: facebook.com, youtube.com"
+                       style="flex:1"
+                       onkeydown="if(event.key==='Enter')addBlock()">
+                <button class="btn btn-danger btn-sm" onclick="addBlock()">+ Bloquear</button>
+            </div>
+            <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:1rem">
+                Los dominios bloqueados se redirigen a 0.0.0.0 vía DNS. Aplica en ~60s tras sincronización.
+            </p>
+            <div id="blocksList" style="display:grid;gap:.4rem;max-height:260px;overflow-y:auto">
+                <div style="text-align:center;color:var(--text-muted);padding:1rem">Cargando…</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeBlocksModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
-<script src="/static/app.js?v=4"></script>
+<script src="/static/app.js?v=5"></script>
 </body>
 </html>

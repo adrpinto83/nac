@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 import aiosqlite
 from app.database import init_db, DB_PATH
 from app.routers import auth, users, devices, router_sync, messages
+from app.routers import traffic, blocks
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -73,6 +74,8 @@ app.include_router(users.router, prefix="/api")
 app.include_router(devices.router, prefix="/api")
 app.include_router(router_sync.router, prefix="/api")
 app.include_router(messages.router, prefix="/api")
+app.include_router(traffic.router, prefix="/api")
+app.include_router(blocks.router, prefix="/api")
 
 # Health check endpoint
 @app.get("/health")

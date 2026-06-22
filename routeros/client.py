@@ -257,6 +257,15 @@ class RouterOSClient:
         data = await self._request("GET", "/ip/hotspot/active")
         sessions = []
         for item in data:
+            # bytes-in / bytes-out vienen como int o string desde RouterOS
+            try:
+                b_in = int(item.get("bytes-in", 0) or 0)
+            except (ValueError, TypeError):
+                b_in = 0
+            try:
+                b_out = int(item.get("bytes-out", 0) or 0)
+            except (ValueError, TypeError):
+                b_out = 0
             sessions.append(
                 HotspotActive(
                     user=item.get("user", ""),
@@ -264,6 +273,8 @@ class RouterOSClient:
                     mac_address=item.get("mac-address", ""),
                     uptime=item.get("uptime", ""),
                     session_time_left=item.get("session-time-left"),
+                    bytes_in=b_in,
+                    bytes_out=b_out,
                 )
             )
         return sessions

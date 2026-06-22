@@ -89,6 +89,8 @@ class HotspotActive:
     mac_address: str
     uptime: str
     session_time_left: Optional[str] = None
+    bytes_in: int = 0
+    bytes_out: int = 0
 
 
 @dataclass

@@ -400,3 +400,53 @@ class MikroTikClient:
                     results["errors"].append(f"{mac}: {str(e)}")
 
         return results
+
+    async def get_hotspot_active(self) -> List[Dict]:
+        """Obtiene sesiones activas del hotspot con bytes de tráfico."""
+        result = await self._request("GET", "/ip/hotspot/active")
+        if not isinstance(result, list):
+            return []
+        sessions = []
+        for item in result:
+            try:
+                b_in = int(item.get("bytes-in", 0) or 0)
+            except (ValueError, TypeError):
+                b_in = 0
+            try:
+                b_out = int(item.get("bytes-out", 0) or 0)
+            except (ValueError, TypeError):
+                b_out = 0
+            sessions.append({
+                "user": item.get("user", ""),
+                "address": item.get("address", ""),
+                "mac_address": item.get("mac-address", ""),
+                "uptime": item.get("uptime", ""),
+                "bytes_in": b_in,
+                "bytes_out": b_out,
+            })
+        return sessions
+
+    async def add_dns_block(self, domain: str, comment: str = "") -> bool:
+        """Agrega entrada DNS estática que redirige dominio a 0.0.0.0 (bloqueo)."""
+        existing = await self.get_dns_static()
+        for entry in existing:
+            if entry.get("name") == domain:
+                return True  # ya existe
+        await self._request("PUT", "/ip/dns/static", {
+            "name": domain,
+            "address": "0.0.0.0",
+            "comment": comment,
+        })
+        return True
+
+    async def remove_dns_block(self, domain: str, comment_filter: str = "") -> bool:
+        """Elimina entrada DNS estática de bloqueo."""
+        existing = await self.get_dns_static()
+        for entry in existing:
+            if entry.get("name") == domain:
+                cmt = entry.get("comment", "")
+                if not comment_filter or cmt.startswith(comment_filter):
+                    entry_id = entry.get(".id", "")
+                    if entry_id:
+                        await self._request("DELETE", f"/ip/dns/static/{entry_id}")
+        return True

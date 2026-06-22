@@ -140,6 +140,32 @@ async def init_db():
         )
     """)
 
+    # Bloqueos de sitios por usuario
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_site_blocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            domain TEXT NOT NULL,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, domain),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+
+    # Snapshots de tráfico por dispositivo
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS traffic_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            bytes_down INTEGER DEFAULT 0,
+            bytes_up INTEGER DEFAULT 0,
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
     await conn.commit()
 
     # Insert default device types
