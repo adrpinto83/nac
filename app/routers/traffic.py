@@ -1,11 +1,15 @@
 """Endpoints para consumo de ancho de banda por usuario."""
 
+import os
 from fastapi import APIRouter, HTTPException, Header
-from typing import Optional
+from pydantic import BaseModel
+from typing import Optional, List
 from app.database import get_db
 from app.security import decode_token
 
 router = APIRouter(prefix="/traffic", tags=["traffic"])
+
+SYNC_KEY = os.environ.get("NAC_SYNC_KEY", "nac-sync-2024")
 
 
 async def verify_token(authorization: Optional[str]):
@@ -18,7 +22,6 @@ async def verify_token(authorization: Optional[str]):
 
 
 def _fmt_bytes(b: int) -> dict:
-    """Convierte bytes a unidad legible."""
     if b >= 1_073_741_824:
         return {"value": round(b / 1_073_741_824, 2), "unit": "GB"}
     if b >= 1_048_576:
@@ -28,6 +31,69 @@ def _fmt_bytes(b: int) -> dict:
     return {"value": b, "unit": "B"}
 
 
+class SessionReport(BaseModel):
+    user: str
+    address: str = ""
+    mac_address: str = ""
+    uptime: str = ""
+    bytes_in: int = 0
+    bytes_out: int = 0
+
+
+class TrafficReportRequest(BaseModel):
+    sessions: List[SessionReport]
+
+
+@router.post("/report")
+async def receive_traffic_report(
+    body: TrafficReportRequest,
+    x_sync_key: Optional[str] = Header(None),
+):
+    """
+    Endpoint que el router MikroTik llama para reportar sesiones activas.
+    Actualiza la tabla traffic_usage con el consumo de cada usuario.
+    """
+    if x_sync_key != SYNC_KEY:
+        raise HTTPException(status_code=403, detail="Clave de sincronización inválida")
+
+    db = await get_db()
+    try:
+        saved = 0
+        for s in body.sessions:
+            if not s.user or (s.bytes_in == 0 and s.bytes_out == 0):
+                continue
+
+            # Buscar usuario por username en el sistema
+            cur = await db.execute(
+                "SELECT id FROM users WHERE username = ? OR cedula = ?",
+                (s.user, s.user),
+            )
+            user_row = await cur.fetchone()
+            if not user_row:
+                continue
+
+            user_id = user_row[0]
+
+            # Actualizar o insertar snapshot de sesión actual
+            # Usamos upsert por (user_id, fecha) para evitar duplicados excesivos
+            await db.execute("""
+                INSERT INTO traffic_usage (user_id, bytes_down, bytes_up)
+                VALUES (?, ?, ?)
+            """, (user_id, s.bytes_in, s.bytes_out))
+
+            # Guardar IP y estado online en tabla users
+            await db.execute("""
+                UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?
+            """, (user_id,))
+
+            saved += 1
+
+        await db.commit()
+        return {"ok": True, "saved": saved}
+    finally:
+        await db.close()
+
+
 @router.get("/users")
 async def get_traffic_per_user(authorization: Optional[str] = Header(None)):
     """Retorna consumo acumulado de ancho de banda por usuario."""
@@ -35,7 +101,6 @@ async def get_traffic_per_user(authorization: Optional[str] = Header(None)):
 
     db = await get_db()
     try:
-        # Verificar rol del llamante
         cur = await db.execute(
             "SELECT role FROM users WHERE username = ?", (payload.get("sub"),)
         )
@@ -43,24 +108,7 @@ async def get_traffic_per_user(authorization: Optional[str] = Header(None)):
         if not caller or caller[0] != "admin":
             raise HTTPException(status_code=403, detail="Solo administradores")
 
-        # Intentar leer datos en tiempo real del router (hotspot active)
-        live_data: dict[str, dict] = {}
-        try:
-            from app.services.mikrotik_client import MikroTikClient
-            client = MikroTikClient()
-            sessions = await client.get_hotspot_active()
-            for s in sessions:
-                live_data[s.user] = {
-                    "bytes_in": s.bytes_in,
-                    "bytes_out": s.bytes_out,
-                    "address": s.address,
-                    "uptime": s.uptime,
-                    "online": True,
-                }
-        except Exception:
-            pass  # Si el router no está disponible, solo mostramos datos históricos
-
-        # Datos históricos de la tabla traffic_usage
+        # Sesiones activas reportadas recientemente (últimos 5 minutos)
         cur = await db.execute("""
             SELECT u.id, u.username, u.full_name,
                    COALESCE(SUM(t.bytes_down), 0) as total_down,
@@ -70,23 +118,27 @@ async def get_traffic_per_user(authorization: Optional[str] = Header(None)):
             LEFT JOIN traffic_usage t ON t.user_id = u.id
             WHERE u.role = 'user' AND u.approval_status = 'approved'
             GROUP BY u.id
-            ORDER BY (total_down + total_up) DESC
+            ORDER BY (COALESCE(SUM(t.bytes_down),0) + COALESCE(SUM(t.bytes_up),0)) DESC
         """)
         rows = await cur.fetchall()
 
+        # Usuarios vistos en los últimos 10 minutos = "online"
+        cur_online = await db.execute("""
+            SELECT DISTINCT user_id FROM traffic_usage
+            WHERE recorded_at >= datetime('now', '-10 minutes')
+        """)
+        online_ids = {r[0] for r in await cur_online.fetchall()}
+
         result = []
         for row in rows:
-            uid, uname, fname, hist_down, hist_up, last_seen = row
-            live = live_data.get(uname, {})
-            total_down = hist_down + live.get("bytes_in", 0)
-            total_up   = hist_up   + live.get("bytes_out", 0)
+            uid, uname, fname, total_down, total_up, last_seen = row
+            total_down = total_down or 0
+            total_up   = total_up   or 0
             result.append({
                 "user_id":    uid,
                 "username":   uname,
                 "full_name":  fname,
-                "online":     live.get("online", False),
-                "ip_address": live.get("address"),
-                "uptime":     live.get("uptime"),
+                "online":     uid in online_ids,
                 "bytes_down": total_down,
                 "bytes_up":   total_up,
                 "bytes_total": total_down + total_up,
@@ -97,44 +149,5 @@ async def get_traffic_per_user(authorization: Optional[str] = Header(None)):
             })
 
         return result
-    finally:
-        await db.close()
-
-
-@router.post("/snapshot")
-async def save_traffic_snapshot(authorization: Optional[str] = Header(None)):
-    """Guarda un snapshot del tráfico actual desde el router."""
-    payload = await verify_token(authorization)
-
-    db = await get_db()
-    try:
-        cur = await db.execute(
-            "SELECT role FROM users WHERE username = ?", (payload.get("sub"),)
-        )
-        caller = await cur.fetchone()
-        if not caller or caller[0] != "admin":
-            raise HTTPException(status_code=403, detail="Solo administradores")
-
-        saved = 0
-        try:
-            from app.services.mikrotik_client import MikroTikClient
-            client = MikroTikClient()
-            sessions = await client.get_hotspot_active()
-            for s in sessions:
-                cur = await db.execute(
-                    "SELECT id FROM users WHERE username = ?", (s.user,)
-                )
-                user_row = await cur.fetchone()
-                if user_row and (s.bytes_in > 0 or s.bytes_out > 0):
-                    await db.execute(
-                        "INSERT INTO traffic_usage (user_id, bytes_down, bytes_up) VALUES (?, ?, ?)",
-                        (user_row[0], s.bytes_in, s.bytes_out),
-                    )
-                    saved += 1
-            await db.commit()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Error al leer router: {e}")
-
-        return {"saved": saved}
     finally:
         await db.close()

@@ -1035,7 +1035,7 @@ async function loadTraffic() {
     try {
         const data = await fetchAPI(`${API}/traffic/users`);
         if (!data.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">Sin datos de consumo</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Sin datos aún — el router enviará estadísticas cada 5 min</td></tr>';
             return;
         }
         const online = data.filter(r => r.online).length;
@@ -1044,20 +1044,19 @@ async function loadTraffic() {
             <tr>
                 <td>
                     <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${r.online ? '#22c55e' : '#d1d5db'};margin-right:.4rem"></span>
-                    ${r.online ? '<strong>En línea</strong>' : '<span style="color:var(--text-muted)">Offline</span>'}
+                    ${r.online ? '<strong style="color:#16a34a">En línea</strong>' : '<span style="color:var(--text-muted)">Offline</span>'}
                 </td>
                 <td>
                     <div style="font-weight:600">${escHtml(r.full_name)}</div>
                     <div style="font-size:.78rem;color:var(--text-muted)">${escHtml(r.username)}</div>
                 </td>
-                <td style="font-family:monospace;font-size:.85rem">${r.ip_address || '—'}</td>
-                <td style="font-size:.85rem;color:var(--text-muted)">${r.uptime || '—'}</td>
+                <td style="font-size:.82rem;color:var(--text-muted)">${r.last_seen ? fmtDate(r.last_seen) : '—'}</td>
                 <td style="text-align:right;color:#3b82f6;font-weight:500">${fmtBytes(r.bytes_down)}</td>
                 <td style="text-align:right;color:#10b981;font-weight:500">${fmtBytes(r.bytes_up)}</td>
                 <td style="text-align:right;font-weight:600">${fmtBytes(r.bytes_total)}</td>
             </tr>`).join('');
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:#ef4444">Error: ${escHtml(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:2rem;color:#ef4444">Error: ${escHtml(e.message)}</td></tr>`;
     }
 }
 
