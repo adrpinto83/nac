@@ -295,12 +295,17 @@ async def pull_script(key: str = Query(default="")):
 
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
-    # Script plano (sin loops complejos) para máxima compatibilidad con /import
+    # Script plano para máxima compatibilidad con /import
+    # Usa upsert en hotspot users: no elimina usuarios existentes para no cortar sesiones activas
+    # (WhatsApp y otras apps usan conexiones persistentes que no deben reiniciarse cada 60s)
     lines = [
         f"# NAC-SYNC {ts} | {len(devices)} dispositivos",
         "",
-        "# Hotspot users: eliminar obsoletos y re-agregar aprobados",
-        '/ip/hotspot/user remove [find comment~"NAC:"]',
+        "# Perfil hotspot sin rate-limit global",
+        "/ip/hotspot/user/profile set [find name=default] rate-limit=\"\"",
+        "",
+        "# Hotspot users: upsert — agrega si no existe, actualiza rate-limit si cambió",
+        "# NO elimina primero para no interrumpir sesiones activas (WhatsApp, etc.)",
     ]
 
     for mac, (dl, ul) in devices.items():
@@ -312,8 +317,25 @@ async def pull_script(key: str = Query(default="")):
         rate_attr = f' rate-limit="{rate}"' if rate else ""
         lines.append(
             f':do {{ /ip/hotspot/user add name="{mac}" profile=default password="" '
-            f'comment="NAC:{mac}"{rate_attr} }} on-error={{}}'
+            f'comment="NAC:{mac}"{rate_attr} }} '
+            f'on-error={{ /ip/hotspot/user set [find name="{mac}"] '
+            f'profile=default rate-limit="{rate}" }}'
         )
+
+    # Eliminar hotspot users obsoletos (NAC: pero no en lista aprobada)
+    if devices:
+        not_in_list = " ".join(f'name!="{mac}"' for mac in devices)
+        lines += [
+            "",
+            "# Eliminar hotspot users obsoletos (revocados o eliminados del sistema)",
+            f'/ip/hotspot/user remove [find comment~"NAC:" {not_in_list}]',
+        ]
+    else:
+        lines += [
+            "",
+            "# Sin dispositivos aprobados — eliminar todos los usuarios NAC",
+            '/ip/hotspot/user remove [find comment~"NAC:"]',
+        ]
 
     lines += [
         "",
@@ -342,10 +364,7 @@ async def pull_script(key: str = Query(default="")):
         'connection-state=established,related action=accept comment="bypass-established" '
         '} on-error={} }',
         "",
-        "# Garantizar que el perfil hotspot default no tenga rate-limit global",
-        "/ip/hotspot/user/profile set [find name=default] rate-limit=\"\"",
-        "",
-        "# Eliminar queues simples residuales (NAC no las usa — son restos de config manual)",
+        "# Eliminar queues simples residuales (NAC no las usa)",
         "/queue/simple remove [find]",
         "",
         ':log info "NAC-SYNC: completo"',
