@@ -1,7 +1,8 @@
 """Endpoints para consumo de ancho de banda por usuario."""
 
 import os
-from fastapi import APIRouter, HTTPException, Header
+from datetime import datetime, timezone
+from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional, List
 from app.database import get_db
@@ -10,6 +11,10 @@ from app.security import decode_token
 router = APIRouter(prefix="/traffic", tags=["traffic"])
 
 SYNC_KEY = os.environ.get("NAC_SYNC_KEY", "nac-sync-2024")
+
+# Cache en memoria de la última sesión reportada por el router (se refresca cada 60s)
+_latest_sessions: dict[str, dict] = {}
+_last_report_at: Optional[str] = None
 
 
 async def verify_token(authorization: Optional[str]):
@@ -89,9 +94,43 @@ async def receive_traffic_report(
             saved += 1
 
         await db.commit()
+
+        # Actualizar cache en memoria con las sesiones actuales del router
+        global _latest_sessions, _last_report_at
+        _latest_sessions = {
+            s.mac_address.upper(): {
+                "user":        s.user,
+                "address":     s.address,
+                "mac_address": s.mac_address,
+                "uptime":      s.uptime,
+                "bytes_in":    s.bytes_in,
+                "bytes_out":   s.bytes_out,
+            }
+            for s in body.sessions
+            if s.mac_address
+        }
+        _last_report_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
         return {"ok": True, "saved": saved}
     finally:
         await db.close()
+
+
+@router.get("/live")
+async def get_live_sessions(key: str = Query(default="")):
+    """
+    Sesiones activas en tiempo real tal como el router las reportó (última vez).
+    Autenticado con sync_key — no requiere login de admin.
+    """
+    if key != SYNC_KEY:
+        raise HTTPException(status_code=403, detail="Clave inválida")
+
+    sessions = list(_latest_sessions.values())
+    return {
+        "last_report_at": _last_report_at,
+        "session_count":  len(sessions),
+        "sessions":       sessions,
+    }
 
 
 @router.get("/users")
