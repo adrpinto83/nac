@@ -342,6 +342,12 @@ async def pull_script(key: str = Query(default="")):
         'connection-state=established,related action=accept comment="bypass-established" '
         '} on-error={} }',
         "",
+        "# Garantizar que el perfil hotspot default no tenga rate-limit global",
+        "/ip/hotspot/user/profile set [find name=default] rate-limit=\"\"",
+        "",
+        "# Eliminar queues simples residuales (NAC no las usa — son restos de config manual)",
+        "/queue/simple remove [find]",
+        "",
         ':log info "NAC-SYNC: completo"',
     ]
 
