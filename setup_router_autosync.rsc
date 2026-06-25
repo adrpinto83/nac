@@ -41,7 +41,24 @@
 
 :put "Scheduler '$SCHED_NAME' configurado (cada 60s)"
 
-# ── 3. Ejecutar inmediatamente (primer sync) ──────────────────────────────────
+# ── 3. Walled Garden — permitir acceso al splash sin autenticación ────────────
+:local PORTAL_HOST "nac-production.up.railway.app"
+
+:if ([:len [/ip hotspot walled-garden find dst-host=$PORTAL_HOST]] = 0) do={
+    /ip hotspot walled-garden add dst-host=$PORTAL_HOST comment="NAC-portal"
+    :put "Walled garden hostname agregado ($PORTAL_HOST)"
+} else={
+    :put "Walled garden hostname ya existia ($PORTAL_HOST)"
+}
+
+:if ([:len [/ip hotspot walled-garden ip find comment="NAC-portal-ip"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-host=$PORTAL_HOST action=accept comment="NAC-portal-ip"
+    :put "Walled garden ip agregado ($PORTAL_HOST)"
+} else={
+    :put "Walled garden ip ya existia"
+}
+
+# ── 4. Ejecutar inmediatamente (primer sync) ──────────────────────────────────
 :put "Ejecutando primer sync..."
 /system/script run $SCRIPT_NAME
 

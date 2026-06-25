@@ -575,14 +575,24 @@ async function loadDevices() {
     try {
         allDevices = await fetchAPI(`${API}/devices/`) || [];
         renderDevices(allDevices);
+        // Actualizar badge de pendientes en sidebar
+        const pending = allDevices.filter(d => d.approval_status === 'pending');
+        const badge = document.getElementById('devicePendingBadge');
+        if (badge) { badge.textContent = pending.length; badge.style.display = pending.length ? '' : 'none'; }
     } catch { /* silent */ }
+}
+
+function deviceStatusBadge(s) {
+    if (s === 'pending')  return '<span class="badge badge-warning">⏳ Pendiente</span>';
+    if (s === 'rejected') return '<span class="badge badge-danger">✕ Rechazado</span>';
+    return '<span class="badge badge-success">✓ Activo</span>';
 }
 
 function renderDevices(list) {
     document.getElementById('devicesTable').innerHTML = list.length === 0
-        ? '<tr class="empty-row"><td colspan="7">Sin dispositivos</td></tr>'
+        ? '<tr class="empty-row"><td colspan="8">Sin dispositivos</td></tr>'
         : list.map(d => `
-            <tr>
+            <tr${d.approval_status === 'pending' ? ' style="background:var(--warning-bg,#fffbeb)"' : ''}>
                 <td>
                     <strong>${escHtml(d.owner_name || d.owner_username || '—')}</strong>
                     ${d.owner_username ? `<br><small style="color:var(--text-muted)">${escHtml(d.owner_username)}</small>` : ''}
@@ -591,14 +601,37 @@ function renderDevices(list) {
                 <td>${d.ip_address || '—'}</td>
                 <td>${d.device_type || '—'}</td>
                 <td>${[d.os_type, d.os_version].filter(Boolean).join(' ') || '—'}</td>
+                <td>${deviceStatusBadge(d.approval_status)}</td>
                 <td>${fmtDate(d.created_at)}</td>
-                <td>
-                    <button class="btn btn-danger btn-sm"
-                        onclick="deleteDevice(${d.id},'${escAttr(d.mac_address)}','${escAttr(d.owner_name||d.owner_username||'')}')">
-                        🗑 Eliminar
-                    </button>
+                <td style="white-space:nowrap">
+                    ${d.approval_status === 'pending' ? `
+                        <button class="btn btn-success btn-sm" onclick="approveDevice(${d.id},'${escAttr(d.mac_address)}')">✓ Aprobar</button>
+                        <button class="btn btn-danger btn-sm"  onclick="rejectDevice(${d.id},'${escAttr(d.mac_address)}')">✕ Rechazar</button>
+                    ` : `
+                        <button class="btn btn-danger btn-sm"
+                            onclick="deleteDevice(${d.id},'${escAttr(d.mac_address)}','${escAttr(d.owner_name||d.owner_username||'')}')">
+                            🗑 Eliminar
+                        </button>
+                    `}
                 </td>
             </tr>`).join('');
+}
+
+async function approveDevice(deviceId, mac) {
+    try {
+        await fetchAPI(`${API}/devices/${deviceId}/approve`, { method: 'PUT' });
+        toast(`✓ Dispositivo ${mac} aprobado.`, 'ok');
+        loadDevices();
+    } catch { toast('❌ Error al aprobar dispositivo.', 'err'); }
+}
+
+async function rejectDevice(deviceId, mac) {
+    if (!confirm(`¿Rechazar el dispositivo ${mac}? No tendrá acceso a la red.`)) return;
+    try {
+        await fetchAPI(`${API}/devices/${deviceId}/reject`, { method: 'PUT' });
+        toast(`✕ Dispositivo ${mac} rechazado.`, 'ok');
+        loadDevices();
+    } catch { toast('❌ Error al rechazar dispositivo.', 'err'); }
 }
 
 async function deleteDevice(deviceId, mac, ownerName) {

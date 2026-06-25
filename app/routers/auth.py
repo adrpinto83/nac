@@ -207,7 +207,7 @@ async def registration_status(mac: Optional[str] = None):
 
     db = await get_db()
     cursor = await db.execute(
-        """SELECT u.approval_status
+        """SELECT u.approval_status, COALESCE(d.approval_status, 'approved') AS dev_status
            FROM users u
            JOIN devices d ON d.user_id = u.id
            WHERE d.mac_address = ?
@@ -220,7 +220,12 @@ async def registration_status(mac: Optional[str] = None):
     if not row:
         return {"status": "not_registered"}
 
-    return {"status": row[0]}  # pending | approved | rejected
+    user_status, dev_status = row
+    if user_status == "rejected":
+        return {"status": "rejected"}
+    if user_status == "pending" or dev_status == "pending":
+        return {"status": "pending"}
+    return {"status": "approved"}
 
 
 def _is_random_mac(mac: str) -> bool:
@@ -473,6 +478,11 @@ async def approve_user(
            WHERE id = ?""",
         (expires_at, user_id)
     )
+    # Aprobar también todos los devices del usuario
+    await db.execute(
+        "UPDATE devices SET approval_status = 'approved' WHERE user_id = ?",
+        (user_id,)
+    )
     await db.commit()
 
     cursor = await db.execute("SELECT username FROM users WHERE id = ?", (user_id,))
@@ -571,7 +581,7 @@ async def add_device(request: AddDeviceRequest, authorization: Optional[str] = H
         await db.close()
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    user_id, approval_status = user
+    user_id, _ = user
 
     # Verificar que la MAC no pertenezca ya a otro usuario
     cur = await db.execute(
@@ -592,10 +602,11 @@ async def add_device(request: AddDeviceRequest, authorization: Optional[str] = H
     except Exception:
         pass
 
+    # Nuevo dispositivo siempre arranca en 'pending' — requiere aprobación del admin
     await db.execute(
         """INSERT INTO devices
-           (user_id, mac_address, ip_address, hostname, device_type, os_type, os_version, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           (user_id, mac_address, ip_address, hostname, device_type, os_type, os_version, notes, approval_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
         (user_id, mac, request.ip_address,
          dev.get("hostname", ""),
          dev.get("type", "unknown"),
@@ -609,6 +620,6 @@ async def add_device(request: AddDeviceRequest, authorization: Optional[str] = H
     return {
         "ok": True,
         "mac_address": mac,
-        "approval_status": approval_status,
-        "message": "Dispositivo agregado correctamente"
+        "approval_status": "pending",
+        "message": "Dispositivo agregado. Pendiente de aprobación del administrador."
     }

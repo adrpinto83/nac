@@ -281,6 +281,7 @@ async def pull_script(key: str = Query(default="")):
            JOIN users u ON d.user_id = u.id
            WHERE u.approval_status = 'approved'
              AND u.is_active = 1
+             AND COALESCE(d.approval_status, 'approved') = 'approved'
              AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
         (now,)
     )
@@ -403,6 +404,7 @@ async def approved_macs_list(key: str = Query(default="")):
         """SELECT d.mac_address FROM devices d
            JOIN users u ON d.user_id = u.id
            WHERE u.approval_status = 'approved' AND u.is_active = 1
+             AND COALESCE(d.approval_status, 'approved') = 'approved'
              AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
         (now,)
     )
@@ -424,6 +426,7 @@ async def approved_devices_with_limits(key: str = Query(default="")):
            FROM devices d
            JOIN users u ON d.user_id = u.id
            WHERE u.approval_status = 'approved' AND u.is_active = 1
+             AND COALESCE(d.approval_status, 'approved') = 'approved'
              AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
         (now,)
     )
@@ -447,6 +450,7 @@ async def check_mac(mac: str = Query(default="")):
         """SELECT d.id FROM devices d
            JOIN users u ON d.user_id = u.id
            WHERE UPPER(d.mac_address) = ? AND u.approval_status = 'approved' AND u.is_active = 1
+             AND COALESCE(d.approval_status, 'approved') = 'approved'
              AND (u.access_expires_at IS NULL OR u.access_expires_at > ?)""",
         (mac_upper, now)
     )

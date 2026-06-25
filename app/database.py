@@ -56,7 +56,7 @@ async def init_db():
         try:
             await conn.execute(f'ALTER TABLE users ADD COLUMN {col} {defn}')
         except Exception:
-            pass  # columna ya existe
+            pass
 
     # Device types table
     await conn.execute("""
@@ -91,6 +91,13 @@ async def init_db():
             UNIQUE(mac_address)
         )
     """)
+
+    # Migración: columna approval_status en devices (default 'approved' para retrocompatibilidad)
+    try:
+        await conn.execute("ALTER TABLE devices ADD COLUMN approval_status TEXT DEFAULT 'approved'")
+        await conn.commit()
+    except Exception:
+        pass  # ya existe
 
     # Messages / Consultas table
     await conn.execute("""

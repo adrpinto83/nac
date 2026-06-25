@@ -279,6 +279,88 @@ async def update_device(device_id: int, update: DeviceUpdate, authorization: Opt
     )
 
 
+@router.put("/{device_id}/approve")
+async def approve_device(device_id: int, authorization: Optional[str] = Header(None)):
+    """Aprobar o rechazar un dispositivo pendiente (solo admin)."""
+    payload = await verify_token(authorization)
+
+    db = await get_db()
+    cursor = await db.execute("SELECT role FROM users WHERE username = ?", (payload["sub"],))
+    admin = await cursor.fetchone()
+    if not admin or admin[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    cursor = await db.execute(
+        "SELECT id, mac_address FROM devices WHERE id = ?", (device_id,)
+    )
+    device = await cursor.fetchone()
+    if not device:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+
+    await db.execute(
+        "UPDATE devices SET approval_status = 'approved' WHERE id = ?", (device_id,)
+    )
+    await db.commit()
+    await db.close()
+    return {"ok": True, "device_id": device_id, "mac_address": device[1], "approval_status": "approved"}
+
+
+@router.put("/{device_id}/reject")
+async def reject_device(device_id: int, authorization: Optional[str] = Header(None)):
+    """Rechazar un dispositivo pendiente (solo admin)."""
+    payload = await verify_token(authorization)
+
+    db = await get_db()
+    cursor = await db.execute("SELECT role FROM users WHERE username = ?", (payload["sub"],))
+    admin = await cursor.fetchone()
+    if not admin or admin[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    await db.execute(
+        "UPDATE devices SET approval_status = 'rejected' WHERE id = ?", (device_id,)
+    )
+    await db.commit()
+    await db.close()
+    return {"ok": True, "device_id": device_id, "approval_status": "rejected"}
+
+
+@router.get("/pending/list")
+async def pending_devices(authorization: Optional[str] = Header(None)):
+    """Dispositivos pendientes de aprobación (usuario aprobado, device pending)."""
+    payload = await verify_token(authorization)
+
+    db = await get_db()
+    cursor = await db.execute("SELECT role FROM users WHERE username = ?", (payload["sub"],))
+    admin = await cursor.fetchone()
+    if not admin or admin[0] != "admin":
+        await db.close()
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    cursor = await db.execute(
+        """SELECT d.id, d.mac_address, d.ip_address, d.device_type, d.os_type, d.os_version,
+                  d.created_at, u.full_name, u.username, u.department
+           FROM devices d
+           JOIN users u ON d.user_id = u.id
+           WHERE d.approval_status = 'pending'
+           ORDER BY d.created_at DESC"""
+    )
+    rows = await cursor.fetchall()
+    await db.close()
+
+    return [
+        {
+            "id": r[0], "mac_address": r[1], "ip_address": r[2],
+            "device_type": r[3], "os_type": r[4], "os_version": r[5],
+            "created_at": r[6], "owner_name": r[7], "owner_username": r[8],
+            "department": r[9]
+        }
+        for r in rows
+    ]
+
+
 @router.delete("/{device_id}")
 async def delete_device(device_id: int, authorization: Optional[str] = Header(None)):
     """Delete device."""
