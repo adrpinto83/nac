@@ -65,32 +65,32 @@ async def receive_traffic_report(
     try:
         saved = 0
         for s in body.sessions:
-            if not s.user or (s.bytes_in == 0 and s.bytes_out == 0):
+            if s.bytes_in == 0 and s.bytes_out == 0:
                 continue
 
-            # Buscar usuario por username en el sistema
+            # El router envía la MAC como campo 'user' y también en 'mac_address'
+            mac = (s.mac_address or s.user or "").upper().strip()
+            if not mac:
+                continue
+
+            # Buscar usuario por MAC en la tabla devices
             cur = await db.execute(
-                "SELECT id FROM users WHERE username = ? OR cedula = ?",
-                (s.user, s.user),
+                "SELECT user_id FROM devices WHERE UPPER(mac_address) = ?", (mac,)
             )
-            user_row = await cur.fetchone()
-            if not user_row:
+            device_row = await cur.fetchone()
+            if not device_row:
                 continue
 
-            user_id = user_row[0]
+            user_id = device_row[0]
 
-            # Actualizar o insertar snapshot de sesión actual
-            # Usamos upsert por (user_id, fecha) para evitar duplicados excesivos
-            await db.execute("""
-                INSERT INTO traffic_usage (user_id, bytes_down, bytes_up)
-                VALUES (?, ?, ?)
-            """, (user_id, s.bytes_in, s.bytes_out))
-
-            # Guardar IP y estado online en tabla users
-            await db.execute("""
-                UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?
-            """, (user_id,))
-
+            await db.execute(
+                "INSERT INTO traffic_usage (user_id, bytes_down, bytes_up) VALUES (?, ?, ?)",
+                (user_id, s.bytes_in, s.bytes_out)
+            )
+            await db.execute(
+                "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
+                (user_id,)
+            )
             saved += 1
 
         await db.commit()
