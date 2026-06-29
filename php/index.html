@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Administrativo – Control de Acceso WiFi</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary:    #4f46e5;
+            --primary-dk: #3730a3;
+            --accent:     #7c3aed;
+            --success:    #059669;
+            --warning:    #d97706;
+            --danger:     #dc2626;
+            --text:       #111827;
+            --text-muted: #6b7280;
+            --border:     #e5e7eb;
+            --bg:         #f3f4f6;
+            --sidebar-w:  240px;
+            --radius:     12px;
+            --radius-sm:  8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── LOGIN ── */
+        #loginContainer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #a855f7 100%);
+        }
+        .login-box {
+            background: #fff;
+            border-radius: var(--radius);
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 24px 80px rgba(0,0,0,.25);
+        }
+        .login-header { text-align: center; margin-bottom: 1.75rem; }
+        .login-header .login-icon {
+            width: 64px; height: 64px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 1.8rem; margin-bottom: .75rem;
+        }
+        .login-header h1 { font-size: 1.4rem; font-weight: 700; color: var(--text); }
+        .login-header p  { font-size: .85rem; color: var(--text-muted); margin-top: .2rem; }
+
+        .form-group { margin-bottom: 1rem; }
+        .form-group label {
+            display: block; font-size: .82rem; font-weight: 600;
+            color: var(--text); margin-bottom: .35rem;
+        }
+        .form-group input, .form-group select {
+            width: 100%; padding: .65rem .85rem;
+            border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-size: .93rem; color: var(--text); background: #fff;
+            transition: border-color .18s, box-shadow .18s;
+            -webkit-appearance: none; min-height: 42px;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+            padding: .65rem 1.25rem; border-radius: var(--radius-sm);
+            border: none; font-size: .88rem; font-weight: 600; cursor: pointer;
+            transition: opacity .15s, transform .1s; min-height: 38px;
+        }
+        .btn:hover:not(:disabled) { opacity: .88; }
+        .btn:disabled { opacity: .55; cursor: not-allowed; }
+        .btn-primary  { background: var(--primary); color: #fff; }
+        .btn-success  { background: var(--success); color: #fff; }
+        .btn-danger   { background: var(--danger);  color: #fff; }
+        .btn-warning  { background: var(--warning); color: #fff; }
+        .btn-ghost    { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+        .btn-ghost:hover { background: #ede9fe; }
+        .btn-block    { width: 100%; }
+        .btn-sm       { padding: .4rem .85rem; font-size: .8rem; min-height: 32px; }
+
+        .error-msg {
+            background: #fef2f2; color: #991b1b;
+            border: 1px solid #fca5a5; border-radius: var(--radius-sm);
+            padding: .65rem .9rem; font-size: .85rem; margin-top: .75rem;
+            display: none;
+        }
+        .error-msg.show { display: block; }
+
+        /* ── APP SHELL ── */
+        #appContainer { display: none; flex-direction: row; min-height: 100vh; }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+            display: flex; flex-direction: column;
+            position: fixed; top: 0; left: 0; bottom: 0;
+            z-index: 100;
+            transition: transform .25s;
+        }
+        .sidebar-header {
+            padding: 1.5rem 1.25rem 1rem;
+            border-bottom: 1px solid rgba(255,255,255,.1);
+        }
+        .sidebar-logo {
+            display: flex; align-items: center; gap: .65rem; margin-bottom: .5rem;
+        }
+        .sidebar-logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, #818cf8, #a78bfa);
+            border-radius: 9px; display: flex; align-items: center;
+            justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+        }
+        .sidebar-logo span { color: #fff; font-size: 1.1rem; font-weight: 700; }
+        .sidebar-user {
+            font-size: .78rem; color: rgba(255,255,255,.55);
+            display: flex; align-items: center; gap: .4rem;
+        }
+        .sidebar-user-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #34d399; flex-shrink: 0;
+        }
+
+        .sidebar-nav { flex: 1; padding: .75rem 0; overflow-y: auto; }
+        .nav-item {
+            display: flex; align-items: center; gap: .65rem;
+            width: 100%; padding: .7rem 1.25rem;
+            background: none; border: none; cursor: pointer;
+            color: rgba(255,255,255,.6); font-size: .88rem; font-weight: 500;
+            text-align: left; border-left: 3px solid transparent;
+            transition: all .15s;
+        }
+        .nav-item:hover { color: #fff; background: rgba(255,255,255,.06); }
+        .nav-item.active {
+            color: #fff; background: rgba(255,255,255,.1);
+            border-left-color: #818cf8;
+        }
+        .nav-icon { font-size: 1.05rem; flex-shrink: 0; }
+        .nav-badge {
+            margin-left: auto; background: #ef4444; color: #fff;
+            border-radius: 100px; padding: .1rem .45rem;
+            font-size: .72rem; font-weight: 700; min-width: 20px; text-align: center;
+        }
+
+        .sidebar-footer {
+            padding: 1rem 1.25rem;
+            border-top: 1px solid rgba(255,255,255,.1);
+        }
+        .btn-logout {
+            width: 100%; padding: .6rem; background: rgba(239,68,68,.15);
+            color: #fca5a5; border: 1px solid rgba(239,68,68,.3);
+            border-radius: var(--radius-sm); font-size: .85rem; font-weight: 600;
+            cursor: pointer; transition: background .15s;
+        }
+        .btn-logout:hover { background: rgba(239,68,68,.28); }
+
+        /* Main */
+        .main-content {
+            margin-left: var(--sidebar-w);
+            flex: 1; padding: 2rem;
+            min-height: 100vh;
+        }
+
+        /* Page */
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .page-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 1.75rem; gap: 1rem; flex-wrap: wrap;
+        }
+        .page-header h1 { font-size: 1.35rem; font-weight: 700; }
+        .page-header p  { font-size: .88rem; color: var(--text-muted); margin-top: .2rem; }
+
+        /* Stat cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem; margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: #fff; border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            display: flex; align-items: center; gap: 1rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        .stat-icon {
+            width: 48px; height: 48px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem; flex-shrink: 0;
+        }
+        .stat-icon.purple  { background: #ede9fe; }
+        .stat-icon.blue    { background: #dbeafe; }
+        .stat-icon.green   { background: #d1fae5; }
+        .stat-icon.yellow  { background: #fef3c7; }
+        .stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1; }
+        .stat-label { font-size: .78rem; color: var(--text-muted); margin-top: .2rem; }
+
+        /* Section card */
+        .section-card {
+            background: #fff; border-radius: var(--radius);
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            overflow: hidden; margin-bottom: 1.5rem;
+        }
+        .section-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1rem 1.5rem; border-bottom: 1px solid var(--border);
+            font-size: .9rem; font-weight: 600;
+        }
+
+        /* Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+        thead th {
+            padding: .7rem 1rem; text-align: left;
+            font-size: .72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--text-muted);
+            border-bottom: 1px solid var(--border); background: #fafafa;
+            white-space: nowrap;
+        }
+        tbody td {
+            padding: .75rem 1rem; border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: #fafafa; }
+        .empty-row td { text-align: center; padding: 2.5rem; color: var(--text-muted); }
+
+        /* Search */
+        .search-wrap { padding: .85rem 1.5rem; border-bottom: 1px solid var(--border); }
+        .search-wrap input {
+            width: 100%; padding: .55rem .85rem;
+            border: 1.5px solid var(--border); border-radius: 100px;
+            font-size: .875rem; color: var(--text); background: #f9fafb;
+            transition: border-color .15s;
+        }
+        .search-wrap input:focus { outline: none; border-color: var(--primary); background: #fff; }
+
+        /* Badges */
+        .badge {
+            display: inline-flex; align-items: center; gap: .3rem;
+            padding: .2rem .6rem; border-radius: 100px;
+            font-size: .75rem; font-weight: 600;
+        }
+        .badge-pending  { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+        .badge-approved { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+        .badge-rejected { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        .badge-admin    { background: #ede9fe; color: #4c1d95; border: 1px solid #c4b5fd; }
+        .badge-user     { background: #f0f9ff; color: #0c4a6e; border: 1px solid #bae6fd; }
+
+        /* Pending cards */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 1.25rem;
+            padding: 1.5rem;
+        }
+        .pending-card {
+            background: #fff; border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .card-header-strip {
+            height: 4px;
+            background: linear-gradient(to right, var(--primary), var(--accent));
+        }
+        .card-body { padding: 1.1rem 1.25rem; flex: 1; }
+        .card-name {
+            font-size: 1rem; font-weight: 700; margin-bottom: .2rem;
+        }
+        .card-username { font-size: .8rem; color: var(--text-muted); margin-bottom: .75rem; }
+        .card-meta {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: .4rem .75rem; margin-bottom: .75rem;
+        }
+        .card-meta-item { display: flex; flex-direction: column; }
+        .card-meta-label {
+            font-size: .68rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--text-muted);
+        }
+        .card-meta-value { font-size: .82rem; font-weight: 500; color: var(--text); }
+        .card-meta-value.mono { font-family: monospace; font-size: .8rem; }
+        .card-ticket {
+            background: #fffbeb; border: 1px solid #fcd34d;
+            border-radius: var(--radius-sm); padding: .45rem .75rem;
+            margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem;
+            font-size: .83rem; font-weight: 600; color: #92400e;
+        }
+        .card-device {
+            background: #f8faff; border: 1px solid #e0e7ff;
+            border-radius: var(--radius-sm); padding: .5rem .75rem;
+            margin-bottom: .75rem;
+        }
+        .card-device-row {
+            display: flex; gap: .5rem; align-items: center;
+            font-size: .8rem; color: var(--text-muted);
+        }
+        .card-device-row + .card-device-row { margin-top: .25rem; }
+        .card-date { font-size: .75rem; color: var(--text-muted); margin-bottom: .25rem; }
+        .card-footer {
+            padding: .85rem 1.25rem; border-top: 1px solid var(--border);
+            display: flex; gap: .6rem; justify-content: flex-end;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,.45);
+            display: none; align-items: center; justify-content: center;
+            z-index: 1000; padding: 1rem;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-box {
+            background: #fff; border-radius: var(--radius);
+            width: 100%; max-width: 460px;
+            box-shadow: 0 24px 80px rgba(0,0,0,.3);
+            overflow: hidden;
+        }
+        .modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+        }
+        .modal-header h3 { font-size: 1.05rem; font-weight: 700; }
+        .modal-close {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: var(--bg); border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; color: var(--text-muted);
+        }
+        .modal-close:hover { background: var(--border); }
+        .modal-body { padding: 1.25rem 1.5rem; }
+        .modal-footer {
+            padding: 1rem 1.5rem; border-top: 1px solid var(--border);
+            display: flex; gap: .65rem; justify-content: flex-end;
+        }
+        .modal-user-preview {
+            background: #f8faff; border: 1px solid #e0e7ff;
+            border-radius: var(--radius-sm); padding: .85rem 1rem;
+            margin-bottom: 1.1rem;
+        }
+        .modal-user-preview strong { display: block; margin-bottom: .2rem; }
+        .modal-user-preview span { font-size: .83rem; color: var(--text-muted); }
+        .modal-label {
+            font-size: .82rem; font-weight: 600; margin-bottom: .35rem;
+            display: block;
+        }
+        .modal-select {
+            width: 100%; padding: .65rem .85rem;
+            border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-size: .9rem; color: var(--text); background: #fff;
+            -webkit-appearance: none; cursor: pointer; min-height: 42px;
+        }
+        .modal-select:focus { outline: none; border-color: var(--primary); }
+        .modal-hint {
+            font-size: .78rem; color: var(--text-muted); margin-top: .4rem;
+        }
+
+        /* Profile card */
+        .profile-wrap {
+            max-width: 560px;
+        }
+        .profile-card {
+            background: #fff; border-radius: var(--radius);
+            box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden;
+        }
+        .profile-cover {
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+        }
+        .profile-info { padding: 0 1.5rem 1.5rem; }
+        .profile-avatar {
+            width: 64px; height: 64px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border: 3px solid #fff; margin-top: -32px; margin-bottom: .75rem;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; color: #fff; font-weight: 700;
+        }
+        .profile-name { font-size: 1.15rem; font-weight: 700; margin-bottom: .15rem; }
+        .profile-role { margin-bottom: 1.1rem; }
+        .profile-fields { display: grid; gap: .6rem; }
+        .profile-field {
+            display: flex; gap: .75rem; align-items: flex-start;
+            font-size: .875rem;
+        }
+        .profile-field-label {
+            width: 110px; flex-shrink: 0;
+            font-size: .78rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: .04em;
+            color: var(--text-muted); padding-top: .05rem;
+        }
+        .profile-field-val { color: var(--text); font-weight: 500; }
+
+        /* Toast */
+        #toast {
+            position: fixed; bottom: 1.5rem; right: 1.5rem;
+            background: #1f2937; color: #fff;
+            padding: .75rem 1.25rem; border-radius: var(--radius-sm);
+            font-size: .875rem; font-weight: 500;
+            box-shadow: 0 8px 24px rgba(0,0,0,.2);
+            transform: translateY(calc(100% + 2rem));
+            transition: transform .25s; z-index: 9999;
+        }
+        #toast.show { transform: translateY(0); }
+        #toast.ok  { background: #065f46; }
+        #toast.err { background: #991b1b; }
+
+        /* Spinner */
+        .spin {
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.35);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin .7s linear infinite; flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Role select inline */
+        .role-select {
+            padding: .25rem .5rem; border: 1.5px solid var(--border);
+            border-radius: 6px; font-size: .8rem; background: #fff;
+            color: var(--text); cursor: pointer;
+        }
+        .role-select:focus { outline: none; border-color: var(--primary); }
+
+        /* Access status banner */
+        .access-banner {
+            border-radius: var(--radius); padding: 1.5rem;
+            display: flex; align-items: center; gap: 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+        .access-banner.approved { background: #ecfdf5; border: 1px solid #6ee7b7; }
+        .access-banner.pending  { background: #fffbeb; border: 1px solid #fcd34d; }
+        .access-banner.rejected { background: #fef2f2; border: 1px solid #fca5a5; }
+        .access-banner-icon { font-size: 2.2rem; flex-shrink: 0; }
+        .access-banner-title { font-size: 1.05rem; font-weight: 700; margin-bottom: .2rem; }
+        .access-banner-sub { font-size: .85rem; color: var(--text-muted); line-height: 1.5; }
+        .access-expiry {
+            margin-top: .5rem; display: inline-flex; align-items: center; gap: .4rem;
+            background: rgba(0,0,0,.06); border-radius: 100px;
+            padding: .2rem .7rem; font-size: .8rem; font-weight: 600;
+        }
+
+        /* Device cards (my access) */
+        .device-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 1rem; }
+        .device-card {
+            background: #fff; border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1.1rem 1.25rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.05);
+        }
+        .device-card-header {
+            display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem;
+        }
+        .device-card-icon {
+            width: 38px; height: 38px; border-radius: 10px;
+            background: #ede9fe; display: flex; align-items: center;
+            justify-content: center; font-size: 1.2rem;
+        }
+        .device-card-type { font-size: .88rem; font-weight: 600; }
+        .device-card-os  { font-size: .78rem; color: var(--text-muted); }
+        .device-card-field {
+            display: flex; flex-direction: column; margin-bottom: .45rem;
+        }
+        .device-card-label {
+            font-size: .68rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--text-muted);
+        }
+        .device-card-val {
+            font-size: .83rem; font-weight: 500; font-family: monospace;
+            color: var(--text); word-break: break-all;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .cards-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="loginContainer">
+    <div class="login-box">
+        <div class="login-header">
+            <div class="login-icon">🔐</div>
+            <h1>Panel Administrativo</h1>
+            <p>Control de Acceso WiFi</p>
+        </div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="loginUser">Usuario</label>
+                <input type="text" id="loginUser" name="username" required
+                       autocomplete="username" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label for="loginPass">Contraseña</label>
+                <input type="password" id="loginPass" name="password" required
+                       autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Ingresar</button>
+        </form>
+        <div id="loginError" class="error-msg"></div>
+    </div>
+</div>
+
+<!-- ── APP ── -->
+<div id="appContainer">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <div class="sidebar-logo-icon">📶</div>
+                <span>NAC WiFi</span>
+            </div>
+            <div class="sidebar-user">
+                <span class="sidebar-user-dot"></span>
+                <span id="sidebarUser">Admin</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <!-- Admin -->
+            <button onclick="navigateTo('dashboard')" class="nav-item active admin-nav" data-page="dashboard">
+                <span class="nav-icon">📊</span> Dashboard
+            </button>
+            <button onclick="navigateTo('pendingUsers')" class="nav-item admin-nav" data-page="pendingUsers" id="navPending">
+                <span class="nav-icon">⏳</span> Solicitudes
+                <span class="nav-badge" id="pendingBadge" style="display:none">0</span>
+            </button>
+            <button onclick="navigateTo('users')" class="nav-item admin-nav" data-page="users">
+                <span class="nav-icon">👥</span> Usuarios
+            </button>
+            <button onclick="navigateTo('devices')" class="nav-item admin-nav" data-page="devices">
+                <span class="nav-icon">📱</span> Dispositivos
+                <span class="nav-badge" id="devicePendingBadge" style="display:none">0</span>
+            </button>
+            <button onclick="navigateTo('traffic')" class="nav-item admin-nav" data-page="traffic">
+                <span class="nav-icon">📶</span> Consumo
+            </button>
+            <button onclick="navigateTo('reports')" class="nav-item admin-nav" data-page="reports">
+                <span class="nav-icon">📈</span> Reportes
+            </button>
+            <button onclick="navigateTo('messages')" class="nav-item" data-page="messages" id="navMessages">
+                <span class="nav-icon">💬</span> Consultas
+                <span class="nav-badge" id="msgBadge" style="display:none">0</span>
+            </button>
+            <!-- User (no admin) -->
+            <button onclick="navigateTo('myAccess')" class="nav-item user-nav" data-page="myAccess" style="display:none">
+                <span class="nav-icon">🌐</span> Mi acceso
+            </button>
+            <!-- All -->
+            <button onclick="navigateTo('profile')" class="nav-item" data-page="profile">
+                <span class="nav-icon">⚙️</span> Mi perfil
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button onclick="handleLogout()" class="btn-logout">↩ Cerrar sesión</button>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+
+        <!-- DASHBOARD -->
+        <div id="dashboardPage" class="page active">
+            <div class="page-header">
+                <div>
+                    <h1>Dashboard</h1>
+                    <p>Resumen del sistema</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="refreshDashboard()">🔄 Actualizar</button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon purple">👥</div>
+                    <div>
+                        <div class="stat-value" id="statTotal">—</div>
+                        <div class="stat-label">Usuarios totales</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon yellow">⏳</div>
+                    <div>
+                        <div class="stat-value" id="statPending">—</div>
+                        <div class="stat-label">Pendientes</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">✅</div>
+                    <div>
+                        <div class="stat-value" id="statApproved">—</div>
+                        <div class="stat-label">Aprobados</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon blue">📱</div>
+                    <div>
+                        <div class="stat-value" id="statDevices">—</div>
+                        <div class="stat-label">Dispositivos</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-card-header">
+                    Usuarios recientes
+                    <button class="btn btn-ghost btn-sm" onclick="navigateTo('users')">Ver todos →</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Nombre</th>
+                                <th>Departamento</th>
+                                <th>Estado</th>
+                                <th>Registrado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentUsersTable">
+                            <tr class="empty-row"><td colspan="5">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SOLICITUDES PENDIENTES -->
+        <div id="pendingUsersPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Solicitudes pendientes</h1>
+                    <p>Usuarios registrados que esperan aprobación</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="loadPendingUsers()">🔄 Actualizar</button>
+            </div>
+            <div id="pendingCards">
+                <div style="padding:2rem;text-align:center;color:var(--text-muted)">Cargando…</div>
+            </div>
+        </div>
+
+        <!-- USUARIOS -->
+        <div id="usersPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Usuarios</h1>
+                    <p>Gestión de cuentas de acceso</p>
+                </div>
+            </div>
+            <div class="section-card">
+                <div class="search-wrap">
+                    <input type="text" id="userSearch" placeholder="🔍  Buscar por usuario, nombre o correo…" oninput="filterUsers()">
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Nombre</th>
+                                <th>Departamento</th>
+                                <th>Cargo</th>
+                                <th>Correo</th>
+                                <th>Estado</th>
+                                <th>Ancho de banda</th>
+                                <th>Rol</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable">
+                            <tr class="empty-row"><td colspan="9">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- DISPOSITIVOS -->
+        <div id="devicesPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Dispositivos</h1>
+                    <p>Equipos registrados en la red</p>
+                </div>
+                <button class="btn btn-primary btn-sm admin-nav" onclick="openAddDeviceModal()">+ Agregar dispositivo</button>
+            </div>
+            <div class="section-card">
+                <div class="search-wrap">
+                    <input type="text" id="deviceSearch" placeholder="🔍  Buscar por MAC, hostname…" oninput="filterDevices()">
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Propietario</th>
+                                <th>Dirección MAC</th>
+                                <th>IP</th>
+                                <th>Tipo</th>
+                                <th>Sistema</th>
+                                <th>Estado</th>
+                                <th>Registrado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="devicesTable">
+                            <tr class="empty-row"><td colspan="7">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- MI ACCESO (usuario regular) -->
+        <div id="myAccessPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Mi acceso WiFi</h1>
+                    <p>Estado de tu cuenta y dispositivos registrados</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="loadMyAccess()">🔄 Actualizar</button>
+            </div>
+            <div id="myAccessContent">
+                <div style="padding:2rem;text-align:center;color:var(--text-muted)">Cargando…</div>
+            </div>
+        </div>
+
+        <!-- CONSUMO DE ANCHO DE BANDA -->
+        <div id="trafficPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Consumo de ancho de banda</h1>
+                    <p>Tráfico por cliente (sesión actual + histórico)</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="loadTraffic()">🔄 Actualizar</button>
+            </div>
+            <div class="section-card">
+                <div class="section-card-header">
+                    Consumo por usuario
+                    <span id="trafficOnlineBadge" style="font-size:.75rem;font-weight:500;color:var(--text-muted)"></span>
+                </div>
+                <div class="table-wrap">
+                    <table id="trafficTable">
+                        <thead>
+                            <tr>
+                                <th>Estado</th>
+                                <th>Usuario</th>
+                                <th>Último reporte</th>
+                                <th style="text-align:right">↓ Descarga</th>
+                                <th style="text-align:right">↑ Subida</th>
+                                <th style="text-align:right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trafficTbody">
+                            <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- REPORTES DE CONSUMO POR FECHA -->
+        <div id="reportsPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Reportes de consumo</h1>
+                    <p>Consumo por empleado en un rango de fechas</p>
+                </div>
+            </div>
+            <div class="section-card">
+                <div class="section-card-header">Filtros</div>
+                <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;padding:1rem">
+                    <div>
+                        <label style="display:block;font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem">Desde</label>
+                        <input type="date" id="repFrom" class="form-input" style="min-width:150px">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem">Hasta</label>
+                        <input type="date" id="repTo" class="form-input" style="min-width:150px">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem">Empleado</label>
+                        <select id="repUser" class="form-input" style="min-width:200px">
+                            <option value="">Todos los empleados</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="loadReport()">📊 Generar</button>
+                    <button class="btn btn-sm" onclick="exportReportCSV()" style="background:#10b981;color:#fff">⬇️ CSV</button>
+                    <button class="btn btn-sm" onclick="exportReportPDF()" style="background:#ef4444;color:#fff">📄 PDF</button>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+                <div class="section-card" style="flex:1;min-width:160px;padding:1rem;text-align:center">
+                    <div style="font-size:.75rem;color:var(--text-muted)">Descarga total</div>
+                    <div id="repTotDown" style="font-size:1.4rem;font-weight:700;color:#3b82f6">—</div>
+                </div>
+                <div class="section-card" style="flex:1;min-width:160px;padding:1rem;text-align:center">
+                    <div style="font-size:.75rem;color:var(--text-muted)">Subida total</div>
+                    <div id="repTotUp" style="font-size:1.4rem;font-weight:700;color:#10b981">—</div>
+                </div>
+                <div class="section-card" style="flex:1;min-width:160px;padding:1rem;text-align:center">
+                    <div style="font-size:.75rem;color:var(--text-muted)">Total general</div>
+                    <div id="repTotAll" style="font-size:1.4rem;font-weight:700">—</div>
+                </div>
+            </div>
+
+            <div class="section-card" id="reportChartCard" style="display:none">
+                <div class="section-card-header" id="repChartTitle">Gráfico de consumo</div>
+                <div id="reportChart" style="padding:1rem"></div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-card-header" id="repTableTitle">Consumo por empleado</div>
+                <div class="table-wrap">
+                    <table id="reportTable">
+                        <thead>
+                            <tr>
+                                <th id="repCol1">Empleado</th>
+                                <th>Departamento</th>
+                                <th style="text-align:right">Sesiones</th>
+                                <th style="text-align:right">↓ Descarga</th>
+                                <th style="text-align:right">↑ Subida</th>
+                                <th style="text-align:right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportTbody">
+                            <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Selecciona un rango y genera el reporte</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONSULTAS -->
+        <div id="messagesPage" class="page">
+            <div class="page-header">
+                <div>
+                    <h1>Consultas</h1>
+                    <p id="msgsSubtitle">Mensajes entre usuarios y administración</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="openNewMsgModal()">+ Nueva consulta</button>
+            </div>
+
+            <!-- Lista de mensajes -->
+            <div class="section-card" id="msgListCard">
+                <div class="section-card-header">
+                    Bandeja
+                    <button class="btn btn-ghost btn-sm" onclick="loadMessages()">🔄 Actualizar</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>De</th>
+                                <th>Para</th>
+                                <th>Asunto</th>
+                                <th>Fecha</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="msgsTable">
+                            <tr class="empty-row"><td colspan="7">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Detalle del mensaje seleccionado -->
+            <div id="msgDetail" style="display:none">
+                <div class="section-card">
+                    <div class="section-card-header" style="gap:.5rem">
+                        <button class="btn btn-ghost btn-sm" onclick="closeMsgDetail()">← Volver</button>
+                        <span id="msgDetailSubject" style="font-size:1rem;font-weight:700;flex:1"></span>
+                        <span id="msgDetailDate" style="font-size:.8rem;color:var(--text-muted)"></span>
+                    </div>
+                    <div style="padding:1.25rem 1.5rem">
+                        <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+                            <span style="font-size:.8rem;color:var(--text-muted)">De: <strong id="msgDetailFrom"></strong></span>
+                            <span style="font-size:.8rem;color:var(--text-muted)" id="msgDetailToWrap">Para: <strong id="msgDetailTo"></strong></span>
+                        </div>
+                        <div id="msgDetailBody" style="font-size:.92rem;line-height:1.7;white-space:pre-wrap;background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:1rem"></div>
+
+                        <!-- Respuesta ya enviada -->
+                        <div id="msgReplyExist" style="display:none;margin-top:1.25rem">
+                            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.5rem">Respuesta</div>
+                            <div id="msgReplyExistBody" style="font-size:.92rem;line-height:1.7;white-space:pre-wrap;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:1rem"></div>
+                            <div style="font-size:.75rem;color:var(--text-muted);margin-top:.35rem">Respondido por <strong id="msgReplyExistBy"></strong> el <span id="msgReplyExistAt"></span></div>
+                        </div>
+
+                        <!-- Formulario de respuesta -->
+                        <div id="msgReplyForm" style="margin-top:1.25rem">
+                            <div style="font-size:.82rem;font-weight:600;margin-bottom:.4rem">Responder</div>
+                            <textarea id="msgReplyText" rows="4"
+                                style="width:100%;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:8px;font-size:.9rem;font-family:inherit;resize:vertical;min-height:90px"
+                                placeholder="Escribe tu respuesta…"></textarea>
+                            <button class="btn btn-primary btn-sm" style="margin-top:.5rem" onclick="sendReply()">Enviar respuesta</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERFIL -->
+        <div id="profilePage" class="page">
+            <div class="page-header">
+                <h1>Mi perfil</h1>
+            </div>
+            <div style="display:grid;gap:1.25rem;max-width:680px">
+
+                <!-- Info card -->
+                <div class="profile-card">
+                    <div class="profile-cover"></div>
+                    <div class="profile-info">
+                        <div class="profile-avatar" id="profileAvatar">?</div>
+                        <div class="profile-name" id="profileName">—</div>
+                        <div class="profile-role" id="profileRole"></div>
+                        <div class="profile-fields" id="profileFields"></div>
+                    </div>
+                </div>
+
+                <!-- Cambiar contraseña -->
+                <div class="section-card">
+                    <div class="section-card-header">🔐 Cambiar contraseña</div>
+                    <div style="padding:1.25rem 1.5rem">
+                        <div id="pwMsg" class="error-msg" style="margin-bottom:.85rem"></div>
+                        <div id="pwOk" style="display:none;background:#ecfdf5;color:#065f46;border:1px solid #6ee7b7;border-radius:8px;padding:.65rem .9rem;font-size:.85rem;margin-bottom:.85rem">
+                            ✅ Contraseña actualizada correctamente.
+                        </div>
+                        <div style="display:grid;gap:.85rem">
+                            <div class="form-group" style="margin:0">
+                                <label for="pwCurrent">Contraseña actual</label>
+                                <input type="password" id="pwCurrent" autocomplete="current-password">
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label for="pwNew">Nueva contraseña</label>
+                                <input type="password" id="pwNew" autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label for="pwConfirm">Confirmar nueva contraseña</label>
+                                <input type="password" id="pwConfirm" autocomplete="new-password">
+                            </div>
+                            <button class="btn btn-primary" id="pwBtn" onclick="changePassword()" style="width:fit-content">
+                                Actualizar contraseña
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ── MODAL APROBAR ── -->
+<div class="modal-overlay" id="approveModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Aprobar acceso</h3>
+            <button class="modal-close" onclick="closeApproveModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-user-preview">
+                <strong id="approveUserName">—</strong>
+                <span id="approveUserMeta">—</span>
+            </div>
+            <label class="modal-label" for="approveHours">Duración del acceso</label>
+            <select class="modal-select" id="approveHours">
+                <option value="">Sin límite (acceso permanente)</option>
+                <option value="4">4 horas</option>
+                <option value="8">8 horas</option>
+                <option value="24">1 día</option>
+                <option value="48">2 días</option>
+                <option value="168">1 semana</option>
+            </select>
+            <p class="modal-hint" id="approveHint"></p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeApproveModal()">Cancelar</button>
+            <button class="btn btn-success" id="approveConfirmBtn" onclick="confirmApprove()">✓ Confirmar aprobación</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal agregar dispositivo (admin) -->
+<div class="modal-overlay" id="addDeviceModal">
+    <div class="modal-box" style="max-width:480px">
+        <div class="modal-header">
+            <h3>Agregar dispositivo</h3>
+            <button class="modal-close" onclick="closeAddDeviceModal()">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <div>
+                <label class="modal-label" for="addDevUser">Usuario propietario</label>
+                <select class="modal-select" id="addDevUser" required></select>
+            </div>
+            <div>
+                <label class="modal-label" for="addDevMac">Dirección MAC</label>
+                <input type="text" id="addDevMac" class="modal-select"
+                    placeholder="Ej: AA:BB:CC:DD:EE:FF"
+                    style="padding:.65rem .85rem;font-family:monospace"
+                    maxlength="17" oninput="formatMacInput(this)">
+                <p class="modal-hint">Formato: XX:XX:XX:XX:XX:XX (mayúsculas)</p>
+            </div>
+            <div>
+                <label class="modal-label" for="addDevType">Tipo de dispositivo</label>
+                <select class="modal-select" id="addDevType">
+                    <option value="unknown">Desconocido</option>
+                    <option value="smartphone">Teléfono / Móvil</option>
+                    <option value="laptop">Laptop</option>
+                    <option value="desktop">Computadora de escritorio</option>
+                    <option value="tablet">Tableta</option>
+                    <option value="printer">Impresora</option>
+                    <option value="other">Otro</option>
+                </select>
+            </div>
+            <div>
+                <label class="modal-label" for="addDevOs">Sistema operativo <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label>
+                <input type="text" id="addDevOs" class="modal-select"
+                    placeholder="Ej: Android 14, Windows 11, iOS 17"
+                    style="padding:.65rem .85rem">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeAddDeviceModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitAddDevice()">Agregar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal agregar dispositivo propio (usuario desde Mi acceso) -->
+<div class="modal-overlay" id="addMyDeviceModal">
+    <div class="modal-box" style="max-width:460px">
+        <div class="modal-header">
+            <h3>Agregar mi dispositivo</h3>
+            <button class="modal-close" onclick="document.getElementById('addMyDeviceModal').classList.remove('show')">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <p style="font-size:.87rem;color:var(--text-muted)">Ingresa la dirección MAC del dispositivo que quieres agregar a tu cuenta.</p>
+            <div>
+                <label class="modal-label" for="addMyDevMac">Dirección MAC</label>
+                <input type="text" id="addMyDevMac" class="modal-select"
+                    placeholder="Ej: AA:BB:CC:DD:EE:FF"
+                    style="padding:.65rem .85rem;font-family:monospace"
+                    maxlength="17" oninput="formatMacInput(this)">
+                <p class="modal-hint">Formato: XX:XX:XX:XX:XX:XX</p>
+            </div>
+            <div>
+                <label class="modal-label" for="addMyDevType">Tipo de dispositivo</label>
+                <select class="modal-select" id="addMyDevType">
+                    <option value="smartphone">Teléfono / Móvil</option>
+                    <option value="laptop">Laptop</option>
+                    <option value="desktop">Computadora de escritorio</option>
+                    <option value="tablet">Tableta</option>
+                    <option value="other">Otro</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="document.getElementById('addMyDeviceModal').classList.remove('show')">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitAddMyDevice()">Agregar dispositivo</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal nueva consulta -->
+<div class="modal-overlay" id="newMsgModal">
+    <div class="modal-box" style="max-width:520px">
+        <div class="modal-header">
+            <h3>Nueva consulta</h3>
+            <button class="modal-close" onclick="closeNewMsgModal()">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <div id="newMsgToWrap">
+                <label class="modal-label" for="newMsgTo">Para (usuario)</label>
+                <select class="modal-select" id="newMsgTo">
+                    <option value="">→ Administración (general)</option>
+                </select>
+            </div>
+            <div>
+                <label class="modal-label" for="newMsgSubject">Asunto</label>
+                <input type="text" id="newMsgSubject" class="modal-select" placeholder="Ej: Solicitud de acceso adicional" style="padding:.65rem .85rem">
+            </div>
+            <div>
+                <label class="modal-label" for="newMsgBody">Mensaje</label>
+                <textarea id="newMsgBody" rows="5"
+                    style="width:100%;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:8px;font-size:.9rem;font-family:inherit;resize:vertical"
+                    placeholder="Describe tu consulta o solicitud…"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeNewMsgModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitNewMsg()">Enviar consulta</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Ancho de banda -->
+<div class="modal-overlay" id="bandwidthModal">
+    <div class="modal-box" style="max-width:420px">
+        <div class="modal-header">
+            <h3>Ancho de banda</h3>
+            <button class="modal-close" onclick="closeBandwidthModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p id="bwUserLabel" style="margin-bottom:1.2rem;color:var(--text-muted);font-size:.9rem"></p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+                <div>
+                    <label style="display:block;margin-bottom:.4rem;font-size:.85rem;font-weight:600">⬇ Descarga (Mbps)</label>
+                    <input type="number" id="bwDownload" min="0" max="1000" placeholder="Sin límite"
+                           style="width:100%;padding:.55rem .75rem;border:1px solid var(--border);border-radius:8px;font-size:.95rem">
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:.4rem;font-size:.85rem;font-weight:600">⬆ Subida (Mbps)</label>
+                    <input type="number" id="bwUpload" min="0" max="1000" placeholder="Sin límite"
+                           style="width:100%;padding:.55rem .75rem;border:1px solid var(--border);border-radius:8px;font-size:.95rem">
+                </div>
+            </div>
+            <p style="font-size:.8rem;color:var(--text-muted)">Deja en blanco para acceso sin límite. Los cambios aplican en el próximo ciclo de sincronización (~60s).</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeBandwidthModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveBandwidth()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Bloqueos de sitios por usuario -->
+<div class="modal-overlay" id="blocksModal">
+    <div class="modal-box" style="max-width:520px">
+        <div class="modal-header">
+            <h3>🚫 Bloqueos de sitios</h3>
+            <button class="modal-close" onclick="closeBlocksModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p id="blocksUserLabel" style="margin-bottom:1rem;color:var(--text-muted);font-size:.9rem"></p>
+            <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+                <input type="text" id="blockDomainInput" class="modal-select"
+                       placeholder="ej: facebook.com, youtube.com"
+                       style="flex:1"
+                       onkeydown="if(event.key==='Enter')addBlock()">
+                <button class="btn btn-danger btn-sm" onclick="addBlock()">+ Bloquear</button>
+            </div>
+            <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:1rem">
+                Los dominios bloqueados se redirigen a 0.0.0.0 vía DNS. Aplica en ~60s tras sincronización.
+            </p>
+            <div id="blocksList" style="display:grid;gap:.4rem;max-height:260px;overflow-y:auto">
+                <div style="text-align:center;color:var(--text-muted);padding:1rem">Cargando…</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeBlocksModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Usuario -->
+<div class="modal-overlay" id="editUserModal">
+    <div class="modal-box" style="max-width:480px">
+        <div class="modal-header">
+            <h3>Editar usuario — <span id="editUserLabel"></span></h3>
+            <button class="modal-close" onclick="closeEditUserModal()">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <div>
+                <label class="modal-label">Nombre completo</label>
+                <input type="text" id="editUserFullName" class="modal-select" style="padding:.65rem .85rem">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.85rem">
+                <div>
+                    <label class="modal-label">Correo</label>
+                    <input type="email" id="editUserEmail" class="modal-select" style="padding:.65rem .85rem">
+                </div>
+                <div>
+                    <label class="modal-label">Teléfono</label>
+                    <input type="text" id="editUserPhone" class="modal-select" style="padding:.65rem .85rem">
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.85rem">
+                <div>
+                    <label class="modal-label">Departamento</label>
+                    <input type="text" id="editUserDept" class="modal-select" style="padding:.65rem .85rem">
+                </div>
+                <div>
+                    <label class="modal-label">Cargo</label>
+                    <input type="text" id="editUserPos" class="modal-select" style="padding:.65rem .85rem">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeEditUserModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveEditUser()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar / Reasignar Dispositivo -->
+<div class="modal-overlay" id="editDeviceModal">
+    <div class="modal-box" style="max-width:460px">
+        <div class="modal-header">
+            <h3>Editar dispositivo</h3>
+            <button class="modal-close" onclick="closeEditDeviceModal()">✕</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:.85rem">
+            <div>
+                <label class="modal-label">MAC Address</label>
+                <code id="editDevMacLabel" style="display:block;padding:.65rem .85rem;background:var(--bg-card);border-radius:6px;font-size:.9rem"></code>
+            </div>
+            <div>
+                <label class="modal-label">Asignar a usuario</label>
+                <select class="modal-select" id="editDevUser"></select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.85rem">
+                <div>
+                    <label class="modal-label">Tipo</label>
+                    <select class="modal-select" id="editDevType">
+                        <option value="unknown">Desconocido</option>
+                        <option value="smartphone">Teléfono / Móvil</option>
+                        <option value="laptop">Laptop</option>
+                        <option value="desktop">Computadora</option>
+                        <option value="tablet">Tableta</option>
+                        <option value="printer">Impresora</option>
+                        <option value="other">Otro</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="modal-label">Sistema operativo</label>
+                    <input type="text" id="editDevOs" class="modal-select" placeholder="Android 14, Windows 11…" style="padding:.65rem .85rem">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeEditDeviceModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveEditDevice()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="/static/app.js?v=8"></script>
+</body>
+</html>

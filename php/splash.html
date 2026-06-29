@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal WiFi – Registro</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary: #4f46e5;
+            --primary-dk: #3730a3;
+            --accent: #7c3aed;
+            --success: #059669;
+            --error: #dc2626;
+            --text: #1e1b4b;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+            --radius: 14px;
+            --radius-sm: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #a855f7 100%);
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        /* ── Layout ── */
+        .portal {
+            display: flex;
+            width: 100%;
+            max-width: 860px;
+            background: #fff;
+            border-radius: var(--radius);
+            box-shadow: 0 24px 80px rgba(0,0,0,.3);
+            overflow: hidden;
+            min-height: 520px;
+        }
+
+        /* ── Left panel ── */
+        .panel-left {
+            width: 280px;
+            flex-shrink: 0;
+            background: linear-gradient(160deg, var(--primary) 0%, var(--accent) 100%);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            padding: 2.25rem 1.75rem;
+            gap: 1.5rem;
+        }
+
+        .brand { text-align: center; }
+        .brand-icon {
+            width: 60px; height: 60px;
+            background: rgba(255,255,255,.18);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem;
+            margin: 0 auto .75rem;
+        }
+        .brand h1 { font-size: 1.3rem; font-weight: 700; }
+        .brand p  { font-size: .82rem; opacity: .8; margin-top: .25rem; }
+
+        .info-block {
+            background: rgba(255,255,255,.12);
+            border-radius: 10px;
+            padding: 1rem;
+            flex: 1;
+        }
+        .info-block-title {
+            font-size: .7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            opacity: .7;
+            margin-bottom: .75rem;
+        }
+        .info-row {
+            display: flex;
+            align-items: flex-start;
+            gap: .6rem;
+            margin-bottom: .65rem;
+            font-size: .82rem;
+            line-height: 1.4;
+        }
+        .info-row:last-child { margin-bottom: 0; }
+        .info-icon { font-size: 1rem; flex-shrink: 0; margin-top: .05rem; }
+        .info-label { opacity: .65; font-size: .7rem; }
+        .info-value { font-weight: 500; word-break: break-all; }
+        .info-value.detecting { opacity: .5; font-style: italic; }
+
+        .panel-left-footer {
+            font-size: .72rem;
+            opacity: .55;
+            text-align: center;
+        }
+
+        /* ── Right panel ── */
+        .panel-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .form-header {
+            padding: 2rem 2rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .form-header h2 { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+        .form-header p  { font-size: .85rem; color: var(--muted); margin-top: .2rem; }
+
+        .form-body {
+            flex: 1;
+            padding: 1.5rem 2rem 2rem;
+            overflow-y: auto;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: .9rem;
+        }
+        .form-grid .full { grid-column: 1 / -1; }
+
+        label {
+            display: block;
+            font-size: .82rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: .3rem;
+        }
+        label .opt { font-weight: 400; color: var(--muted); }
+
+        input {
+            width: 100%;
+            padding: .65rem .85rem;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: .93rem;
+            color: var(--text);
+            background: #fff;
+            transition: border-color .18s, box-shadow .18s;
+            -webkit-appearance: none;
+            min-height: 42px;
+        }
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+        }
+        input::placeholder { color: #b0b7c3; }
+        .hint { font-size: .72rem; color: var(--muted); margin-top: .25rem; }
+
+        select {
+            width: 100%;
+            padding: .65rem .85rem;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: .93rem;
+            color: var(--text);
+            background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right .85rem center;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+            min-height: 42px;
+            transition: border-color .18s, box-shadow .18s;
+        }
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+        }
+        select.placeholder-shown { color: #b0b7c3; }
+        .section-divider {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; gap: .6rem;
+            margin: .4rem 0 .2rem;
+            font-size: .72rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .05em;
+            color: var(--primary);
+        }
+        .section-divider::after {
+            content: ''; flex: 1; height: 1px;
+            background: linear-gradient(to right, #c7d2fe, transparent);
+        }
+
+        .pw-wrap { position: relative; }
+        .pw-wrap input { padding-right: 2.6rem; }
+        .pw-toggle {
+            position: absolute; right: .7rem; top: 50%;
+            transform: translateY(-50%);
+            background: none; border: none; cursor: pointer;
+            color: var(--muted); font-size: 1rem; padding: .2rem;
+        }
+
+        /* message */
+        .msg {
+            border-radius: var(--radius-sm);
+            padding: .75rem 1rem;
+            font-size: .85rem;
+            margin-bottom: .9rem;
+            display: none;
+        }
+        .msg.ok  { background:#ecfdf5; color:#065f46; border:1px solid #6ee7b7; display:block; }
+        .msg.err { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; display:block; }
+
+        /* Bloqueo MAC aleatoria */
+        .mac-block {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 2rem 1.75rem;
+            gap: 1rem;
+        }
+        .mac-block.show { display: flex; }
+        .mac-block-icon {
+            width: 64px; height: 64px;
+            background: #fff7ed; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem;
+        }
+        .mac-block h2 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+        .mac-block .mac-block-sub {
+            font-size: .85rem; color: var(--muted); line-height: 1.6; max-width: 340px;
+        }
+        .mac-block .mac-val {
+            font-family: monospace; font-size: .9rem;
+            background: #fef2f2; color: var(--error);
+            padding: .3rem .75rem; border-radius: 6px;
+            border: 1px solid #fca5a5;
+        }
+        .steps-title {
+            font-size: .78rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--muted); margin-bottom: .5rem;
+        }
+        .os-tabs {
+            display: flex; gap: .4rem; flex-wrap: wrap; justify-content: center;
+        }
+        .os-tab {
+            padding: .35rem .75rem; border-radius: 100px;
+            border: 1.5px solid var(--border); background: white;
+            font-size: .8rem; cursor: pointer; transition: all .15s;
+            color: var(--text);
+        }
+        .os-tab.active {
+            border-color: var(--primary); background: #ede9fe; color: var(--primary-dk);
+            font-weight: 600;
+        }
+        .os-instructions { display: none; width: 100%; }
+        .os-instructions.show { display: block; }
+        .steps {
+            list-style: none;
+            background: #f8faff;
+            border: 1px solid #e0e7ff;
+            border-radius: var(--radius-sm);
+            padding: .9rem 1rem;
+            text-align: left;
+        }
+        .steps li {
+            display: flex; gap: .6rem;
+            font-size: .82rem; color: var(--text);
+            padding: .3rem 0; line-height: 1.4;
+        }
+        .steps li:not(:last-child) { border-bottom: 1px solid #e0e7ff; }
+        .step-num {
+            width: 18px; height: 18px; min-width: 18px;
+            background: var(--primary); color: white;
+            border-radius: 50%; font-size: .7rem; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            margin-top: .05rem;
+        }
+        .btn-retry {
+            margin-top: .5rem;
+            padding: .7rem 2rem;
+            background: var(--primary); color: white;
+            border: none; border-radius: var(--radius-sm);
+            font-size: .9rem; font-weight: 600; cursor: pointer;
+        }
+
+        /* submit */
+        .btn-submit {
+            width: 100%; margin-top: 1.1rem;
+            padding: .8rem;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            color: #fff; border: none; border-radius: var(--radius-sm);
+            font-size: .95rem; font-weight: 700; cursor: pointer;
+            transition: opacity .18s, transform .12s;
+            min-height: 46px;
+            display: flex; align-items: center; justify-content: center; gap: .5rem;
+        }
+        .btn-submit:hover:not(:disabled) { opacity: .91; transform: translateY(-1px); }
+        .btn-submit:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+        .divider {
+            display: flex; align-items: center; gap: .6rem;
+            margin: .9rem 0; color: var(--muted); font-size: .78rem;
+        }
+        .divider::before,.divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+        .btn-login {
+            width: 100%; padding: .7rem;
+            background: transparent; color: var(--primary);
+            border: 1.5px solid var(--primary); border-radius: var(--radius-sm);
+            font-size: .9rem; font-weight: 600; cursor: pointer;
+            transition: background .15s; min-height: 42px;
+        }
+        .btn-login:hover { background: #f0f4ff; }
+
+        /* Pantalla de estado (éxito, pendiente, rechazado) */
+        .status-screen {
+            display: none; text-align: center;
+            padding: 3rem 2rem;
+            flex-direction: column; align-items: center; gap: .75rem;
+        }
+        .status-screen.show { display: flex; }
+        .status-icon {
+            width: 72px; height: 72px;
+            border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; font-size: 2.1rem;
+            margin-bottom: .5rem;
+        }
+        .status-icon.green  { background: #ecfdf5; }
+        .status-icon.yellow { background: #fffbeb; }
+        .status-icon.red    { background: #fef2f2; }
+        .status-screen h2 { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+        .status-screen p  { color: var(--muted); font-size: .88rem; line-height: 1.65; max-width: 320px; }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: .4rem;
+            padding: .35rem .9rem; border-radius: 100px;
+            font-size: .8rem; font-weight: 600;
+        }
+        .badge-pending  { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+        .badge-approved { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+        .badge-rejected { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        .pulse {
+            display: inline-block;
+            animation: pulse 1.8s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        .countdown { margin-top: .5rem; color: var(--primary); font-size: .85rem; font-weight: 500; }
+        .btn-outline {
+            margin-top: .75rem; padding: .65rem 1.75rem;
+            background: transparent; color: var(--primary);
+            border: 1.5px solid var(--primary); border-radius: var(--radius-sm);
+            font-size: .88rem; font-weight: 600; cursor: pointer;
+            transition: background .15s;
+        }
+        .btn-outline:hover { background: #f0f4ff; }
+
+        /* spinner */
+        .spin {
+            width: 17px; height: 17px;
+            border: 2px solid rgba(255,255,255,.35);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Mobile ── */
+        @media (max-width: 640px) {
+            body { padding: 0; align-items: flex-start; }
+            .portal {
+                flex-direction: column;
+                max-width: 100%;
+                min-height: 100vh;
+                min-height: 100dvh;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            .panel-left {
+                width: 100%;
+                padding: 1.5rem 1.25rem;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+            .brand { display: flex; align-items: center; gap: .75rem; text-align: left; flex: 1; }
+            .brand-icon { margin: 0; width: 44px; height: 44px; font-size: 1.3rem; }
+            .info-block { width: 100%; }
+            .info-block-title { margin-bottom: .5rem; }
+            .info-row { margin-bottom: .45rem; }
+            .panel-left-footer { display: none; }
+            .form-header { padding: 1.25rem 1.25rem .75rem; }
+            .form-body { padding: 1rem 1.25rem 1.5rem; }
+            .form-grid { grid-template-columns: 1fr; }
+            .form-grid .full { grid-column: 1; }
+        }
+    </style>
+</head>
+<body>
+<div class="portal">
+
+    <!-- Panel izquierdo -->
+    <div class="panel-left">
+        <div class="brand">
+            <div class="brand-icon">📶</div>
+            <div>
+                <h1>Portal WiFi</h1>
+                <p>Acceso a Internet</p>
+            </div>
+        </div>
+
+        <div class="info-block">
+            <div class="info-block-title">Información detectada</div>
+
+            <div class="info-row">
+                <span class="info-icon" id="typeIcon">📱</span>
+                <div>
+                    <div class="info-label">Dispositivo</div>
+                    <div class="info-value detecting" id="infoType">Detectando…</div>
+                </div>
+            </div>
+
+            <div class="info-row">
+                <span class="info-icon">💻</span>
+                <div>
+                    <div class="info-label">Sistema</div>
+                    <div class="info-value detecting" id="infoOS">Detectando…</div>
+                </div>
+            </div>
+
+            <div class="info-row">
+                <span class="info-icon">🌐</span>
+                <div>
+                    <div class="info-label">Navegador</div>
+                    <div class="info-value detecting" id="infoBrowser">Detectando…</div>
+                </div>
+            </div>
+
+            <div class="info-row">
+                <span class="info-icon">📍</span>
+                <div>
+                    <div class="info-label">Dirección IP</div>
+                    <div class="info-value detecting" id="infoIP">Detectando…</div>
+                </div>
+            </div>
+
+            <div class="info-row">
+                <span class="info-icon">🔑</span>
+                <div>
+                    <div class="info-label">Dirección MAC</div>
+                    <div class="info-value detecting" id="infoMAC">Detectando…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-left-footer">🔒 Datos usados solo para control de acceso</div>
+    </div>
+
+    <!-- Panel derecho -->
+    <div class="panel-right">
+
+        <!-- Registro enviado (recién registrado) -->
+        <div class="status-screen" id="screenSuccess">
+            <div class="status-icon green">✅</div>
+            <h2>¡Solicitud enviada!</h2>
+            <span class="status-badge badge-pending">⏳ Pendiente de aprobación</span>
+            <p>Tu registro fue recibido. Un administrador revisará tu cuenta y te dará acceso pronto.<br>No es necesario que vuelvas a registrarte.</p>
+            <div class="countdown" id="countdown"></div>
+        </div>
+
+        <!-- Ya registrado, esperando aprobación -->
+        <div class="status-screen" id="screenPending">
+            <div class="status-icon yellow"><span class="pulse">⏳</span></div>
+            <h2>Solicitud en proceso</h2>
+            <span class="status-badge badge-pending">Pendiente de aprobación</span>
+            <p>Ya te registraste en esta red. Tu solicitud está siendo revisada por un administrador.<br>
+               Cuando sea aprobada, podrás navegar con normalidad.</p>
+            <button class="btn-outline" onclick="location.reload()">🔄 Verificar estado</button>
+        </div>
+
+        <!-- Aprobado pero sin internet (hotspot aún no sincronizado) -->
+        <div class="status-screen" id="screenApproved">
+            <div class="status-icon green">🎉</div>
+            <h2>¡Acceso aprobado!</h2>
+            <span class="status-badge badge-approved">✓ Aprobado</span>
+            <p>Tu cuenta fue aprobada. Desconéctate y vuelve a conectar al WiFi para activar tu acceso a internet.</p>
+            <button class="btn-outline" onclick="location.reload()">🔄 Recargar</button>
+        </div>
+
+        <!-- Rechazado -->
+        <div class="status-screen" id="screenRejected">
+            <div class="status-icon red">🚫</div>
+            <h2>Solicitud rechazada</h2>
+            <span class="status-badge badge-rejected">Rechazado</span>
+            <p>Tu solicitud no fue aprobada. Contacta al administrador de red para más información.</p>
+        </div>
+
+        <!-- Bloqueo MAC aleatoria -->
+        <div class="mac-block" id="macBlock">
+            <div class="mac-block-icon">⚠️</div>
+            <h2>MAC aleatoria detectada</h2>
+            <p class="mac-block-sub">
+                Tu dispositivo usa una <strong>dirección MAC aleatoria</strong>.
+                Esta red requiere una MAC fija para identificar tu dispositivo de forma permanente.
+                Debes desactivar la aleatorización antes de registrarte.
+            </p>
+            <div class="mac-val" id="macBlockVal"></div>
+
+            <div style="width:100%">
+                <div class="steps-title">Instrucciones para desactivar MAC aleatoria</div>
+                <div class="os-tabs" id="osTabs">
+                    <button class="os-tab active" data-os="android">🤖 Android</button>
+                    <button class="os-tab" data-os="ios">🍎 iPhone / iPad</button>
+                    <button class="os-tab" data-os="windows">🪟 Windows</button>
+                    <button class="os-tab" data-os="other">Otro</button>
+                </div>
+
+                <div class="os-instructions show" id="inst-android">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Abre <strong>Ajustes</strong> → <strong>Conexiones</strong> → <strong>Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Mantén presionado el nombre de la red <strong>DesarrolloWiFi</strong></li>
+                        <li><span class="step-num">3</span>Selecciona <strong>Administrar configuración de red</strong></li>
+                        <li><span class="step-num">4</span>Toca <strong>Opciones avanzadas</strong></li>
+                        <li><span class="step-num">5</span>En <strong>Tipo de dirección MAC</strong>, elige <strong>MAC del teléfono</strong></li>
+                        <li><span class="step-num">6</span>Desconéctate y vuelve a conectar al WiFi</li>
+                    </ul>
+                </div>
+
+                <div class="os-instructions" id="inst-ios">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Abre <strong>Ajustes</strong> → <strong>Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Toca el ícono <strong>ⓘ</strong> junto a <strong>DesarrolloWiFi</strong></li>
+                        <li><span class="step-num">3</span>Desactiva <strong>Dirección Wi-Fi privada</strong></li>
+                        <li><span class="step-num">4</span>Confirma tocando <strong>Continuar</strong></li>
+                        <li><span class="step-num">5</span>El dispositivo se reconectará automáticamente</li>
+                    </ul>
+                </div>
+
+                <div class="os-instructions" id="inst-windows">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Abre <strong>Configuración</strong> → <strong>Red e Internet</strong> → <strong>Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Haz clic en <strong>Administrar redes conocidas</strong></li>
+                        <li><span class="step-num">3</span>Selecciona <strong>DesarrolloWiFi</strong> → <strong>Propiedades</strong></li>
+                        <li><span class="step-num">4</span>En <strong>Dirección de hardware aleatoria</strong>, selecciona <strong>Desactivado</strong></li>
+                        <li><span class="step-num">5</span>Desconéctate y vuelve a conectar al WiFi</li>
+                    </ul>
+                </div>
+
+                <div class="os-instructions" id="inst-other">
+                    <ul class="steps">
+                        <li><span class="step-num">1</span>Busca en los ajustes de red la opción <strong>MAC aleatoria</strong> o <strong>Privacidad Wi-Fi</strong></li>
+                        <li><span class="step-num">2</span>Desactívala para la red <strong>DesarrolloWiFi</strong></li>
+                        <li><span class="step-num">3</span>Reconéctate al WiFi y recarga esta página</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button class="btn-retry" onclick="location.reload()">🔄 Ya la desactivé, recargar</button>
+        </div>
+
+        <!-- Formulario -->
+        <div id="formSection">
+            <div class="form-header">
+                <h2>Solicitar acceso</h2>
+                <p>Completa tus datos para registrarte en la red</p>
+            </div>
+
+            <div class="form-body">
+                <div class="msg" id="msg"></div>
+
+                <form id="regForm" novalidate>
+                    <div class="form-grid">
+                        <div>
+                            <label for="fullName">Nombre completo</label>
+                            <input type="text" id="fullName" required
+                                   placeholder="Ej: Ana García"
+                                   autocomplete="name">
+                        </div>
+                        <div>
+                            <label for="username">Usuario</label>
+                            <input type="text" id="username" required
+                                   placeholder="Ej: ana.garcia"
+                                   autocomplete="username"
+                                   autocapitalize="none" spellcheck="false">
+                            <div class="hint">Sin espacios ni símbolos especiales</div>
+                        </div>
+
+                        <div class="full">
+                            <label for="password">Contraseña</label>
+                            <div class="pw-wrap">
+                                <input type="password" id="password" required
+                                       placeholder="Mínimo 6 caracteres"
+                                       autocomplete="new-password" minlength="6">
+                                <button type="button" class="pw-toggle" id="pwToggle">👁️</button>
+                            </div>
+                        </div>
+
+                        <!-- Datos de empresa -->
+                        <div class="section-divider full">Datos de empresa</div>
+
+                        <div>
+                            <label for="department">Departamento</label>
+                            <select id="department" required>
+                                <option value="" disabled selected>Selecciona tu departamento...</option>
+                                <option>Ambiente</option>
+                                <option>Siho</option>
+                                <option>Logistica</option>
+                                <option>Relaciones Laborales</option>
+                                <option>Saneamiento</option>
+                                <option>Operaciones</option>
+                                <option>AIT y Electricidad</option>
+                                <option>Mantenimiento Mecanico</option>
+                                <option>Maquinarias Pesadas</option>
+                                <option>OPI</option>
+                                <option>Quimicos</option>
+                                <option>Otros</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="position">Cargo</label>
+                            <input type="text" id="position"
+                                   placeholder="Ej: Analista, Técnico, Supervisor"
+                                   autocomplete="organization-title">
+                            <div class="hint">Tu puesto dentro del departamento</div>
+                        </div>
+
+                        <!-- Contacto -->
+                        <div class="section-divider full">Contacto <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></div>
+
+                        <div>
+                            <label for="email">Correo</label>
+                            <input type="email" id="email"
+                                   placeholder="correo@ejemplo.com"
+                                   autocomplete="email" inputmode="email">
+                        </div>
+                        <div>
+                            <label for="phone">Teléfono</label>
+                            <input type="tel" id="phone"
+                                   placeholder="0999 123 456"
+                                   autocomplete="tel" inputmode="tel">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-submit" id="submitBtn">
+                        Solicitar acceso
+                    </button>
+                </form>
+
+                <div class="divider">¿Ya tienes cuenta?</div>
+
+                <!-- Login para agregar dispositivo existente -->
+                <div id="addDevSection">
+                    <p style="font-size:.82rem;color:var(--muted);text-align:center;margin-bottom:.85rem">
+                        Si ya tienes acceso aprobado, inicia sesión para agregar este dispositivo a tu cuenta.
+                    </p>
+                    <div class="msg" id="addDevMsg"></div>
+                    <div style="display:grid;gap:.65rem">
+                        <div>
+                            <label for="adUsername">Usuario</label>
+                            <input type="text" id="adUsername" autocomplete="username"
+                                   autocapitalize="none" spellcheck="false" placeholder="tu.usuario">
+                        </div>
+                        <div>
+                            <label for="adPassword">Contraseña</label>
+                            <input type="password" id="adPassword" autocomplete="current-password" placeholder="Contraseña">
+                        </div>
+                        <button type="button" class="btn-submit" id="addDevBtn" onclick="loginAndAddDevice()" style="margin-top:0">
+                            Agregar este dispositivo a mi cuenta
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // ── Helpers ──
+    const API = window.location.origin + '/api';
+
+    function showScreen(id) {
+        ['screenSuccess','screenPending','screenApproved','screenRejected','macBlock']
+            .forEach(s => {
+                const el = document.getElementById(s);
+                if (el) { el.classList.remove('show'); el.style.display = ''; }
+            });
+        document.getElementById('formSection').style.display = 'none';
+        const target = document.getElementById(id);
+        if (target) target.classList.add('show');
+    }
+
+    // ── Leer parámetros del router (inyectados por MikroTik hotspot) ──
+    const params = new URLSearchParams(location.search);
+    const routerMAC      = params.get('mac')      || '';
+    const routerIP       = params.get('ip')        || '';
+    const routerHostname = params.get('hostname')  || '';
+
+    // ── Detectar dispositivo via User-Agent ──
+    function detect() {
+        const ua = navigator.userAgent;
+        let type = 'Computadora', typeIcon = '💻';
+        let os = 'Desconocido', osVer = '';
+        let browser = 'Navegador', bVer = '';
+
+        // OS + tipo
+        if (/android/i.test(ua)) {
+            os = 'Android';
+            const m = ua.match(/Android ([0-9.]+)/i); if (m) osVer = m[1];
+            type = /tablet|pad/i.test(ua) ? 'Tableta' : 'Móvil';
+            typeIcon = type === 'Tableta' ? '📟' : '📱';
+        } else if (/iphone/i.test(ua)) {
+            os = 'iOS';
+            const m = ua.match(/OS ([0-9_]+)/i); if (m) osVer = m[1].replace(/_/g,'.');
+            type = 'Móvil'; typeIcon = '📱';
+        } else if (/ipad/i.test(ua) || (/macintosh/i.test(ua) && 'ontouchend' in document)) {
+            os = 'iPadOS';
+            const m = ua.match(/OS ([0-9_]+)/i); if (m) osVer = m[1].replace(/_/g,'.');
+            type = 'Tableta'; typeIcon = '📟';
+        } else if (/windows nt/i.test(ua)) {
+            os = 'Windows';
+            const m = ua.match(/Windows NT ([0-9.]+)/i);
+            if (m) osVer = {'10.0':'10/11','6.3':'8.1','6.2':'8','6.1':'7'}[m[1]] || m[1];
+            type = 'Computadora'; typeIcon = '💻';
+        } else if (/macintosh/i.test(ua)) {
+            os = 'macOS';
+            const m = ua.match(/Mac OS X ([0-9_]+)/i);
+            if (m) osVer = m[1].replace(/_/g,'.');
+            type = 'Computadora'; typeIcon = '💻';
+        } else if (/linux/i.test(ua)) {
+            os = 'Linux'; type = 'Computadora'; typeIcon = '💻';
+        }
+
+        // Browser
+        if (/edg\//i.test(ua)) {
+            browser = 'Edge';
+            const m = ua.match(/Edg\/([0-9]+)/i); if (m) bVer = m[1];
+        } else if (/samsungbrowser/i.test(ua)) {
+            browser = 'Samsung Internet';
+        } else if (/opr\//i.test(ua)) {
+            browser = 'Opera';
+        } else if (/chrome|crios/i.test(ua)) {
+            browser = 'Chrome';
+            const m = ua.match(/(?:Chrome|CriOS)\/([0-9]+)/i); if (m) bVer = m[1];
+        } else if (/firefox|fxios/i.test(ua)) {
+            browser = 'Firefox';
+            const m = ua.match(/(?:Firefox|FxiOS)\/([0-9]+)/i); if (m) bVer = m[1];
+        } else if (/safari/i.test(ua)) {
+            browser = 'Safari';
+            const m = ua.match(/Version\/([0-9]+)/i); if (m) bVer = m[1];
+        }
+
+        return { type, typeIcon, os, osVer, browser, bVer };
+    }
+
+    const d = detect();
+
+    function setText(id, val) {
+        const el = document.getElementById(id);
+        el.textContent = val;
+        el.classList.remove('detecting');
+    }
+
+    setText('typeIcon', d.typeIcon);
+    setText('infoType', d.type);
+    setText('infoOS',   d.os + (d.osVer ? ' ' + d.osVer : ''));
+    setText('infoBrowser', d.browser + (d.bVer ? ' ' + d.bVer : ''));
+    setText('infoIP',  routerIP  || '—');
+    setText('infoMAC', routerMAC || '—');
+
+    // ── Detectar MAC aleatoria (bit de administración local) ──
+    function isRandomMAC(mac) {
+        if (!mac) return false;
+        try {
+            const first = parseInt(mac.replace(/-/g,':').split(':')[0], 16);
+            return !!(first & 0x02);
+        } catch { return false; }
+    }
+
+    // ── Verificar estado de registro por MAC ──
+    async function checkAndRender() {
+        if (!routerMAC) return; // sin MAC del router → mostrar formulario directamente
+
+        if (isRandomMAC(routerMAC)) {
+            showScreen('macBlock');
+            document.getElementById('macBlock').classList.add('show');
+            document.getElementById('formSection').style.display = 'none';
+            document.getElementById('macBlockVal').textContent = routerMAC;
+
+        // Auto-seleccionar pestaña según OS detectado
+        const osLower = d.os.toLowerCase();
+        let defaultTab = 'android';
+        if (osLower.includes('ios') || osLower.includes('ipad')) defaultTab = 'ios';
+        else if (osLower.includes('windows'))                     defaultTab = 'windows';
+
+        document.querySelectorAll('.os-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.os === defaultTab);
+        });
+        document.querySelectorAll('.os-instructions').forEach(i => {
+            i.classList.toggle('show', i.id === 'inst-' + defaultTab);
+        });
+
+            // Tabs click
+            document.getElementById('osTabs').addEventListener('click', function (e) {
+                const tab = e.target.closest('.os-tab');
+                if (!tab) return;
+                document.querySelectorAll('.os-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.os-instructions').forEach(i => i.classList.remove('show'));
+                document.getElementById('inst-' + tab.dataset.os).classList.add('show');
+            });
+            return; // no continuar con la verificación de estado
+        }
+
+        // MAC fija: consultar estado de registro
+        try {
+            const res = await fetch(API + '/auth/registration-status?mac=' + encodeURIComponent(routerMAC));
+            const data = await res.json();
+            const status = data.status;
+
+            if (status === 'pending') {
+                showScreen('screenPending');
+            } else if (status === 'approved') {
+                showScreen('screenApproved');
+            } else if (status === 'rejected') {
+                showScreen('screenRejected');
+            }
+            // 'not_registered' → dejar el formulario visible (no hacer nada)
+        } catch {
+            // Error de red → mostrar formulario igualmente
+        }
+    }
+
+    checkAndRender();
+
+
+    // ── Auto-sugerir usuario desde nombre completo ──
+    document.getElementById('fullName').addEventListener('input', function () {
+        const uEl = document.getElementById('username');
+        if (!uEl._touched) {
+            uEl.value = this.value
+                .toLowerCase()
+                .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .replace(/[^a-z0-9\s]/g, '').trim()
+                .split(/\s+/).slice(0, 2).join('.');
+        }
+    });
+    document.getElementById('username').addEventListener('input', function () {
+        this._touched = true;
+    });
+
+    // ── Toggle contraseña ──
+    document.getElementById('pwToggle').addEventListener('click', function () {
+        const pw = document.getElementById('password');
+        const show = pw.type === 'password';
+        pw.type = show ? 'text' : 'password';
+        this.textContent = show ? '🙈' : '👁️';
+    });
+
+    // ── Ocultar sección "agregar dispositivo" si no hay MAC del router ──
+    if (!routerMAC) {
+        const sec = document.getElementById('addDevSection');
+        if (sec) sec.style.display = 'none';
+    }
+
+    // ── Login e agregar dispositivo a cuenta existente ──
+    async function loginAndAddDevice() {
+        const username = document.getElementById('adUsername').value.trim();
+        const password = document.getElementById('adPassword').value;
+        const msgEl    = document.getElementById('addDevMsg');
+        const btn      = document.getElementById('addDevBtn');
+
+        msgEl.className = 'msg';
+        if (!username || !password) {
+            msgEl.className = 'msg err';
+            msgEl.textContent = 'Ingresa tu usuario y contraseña.';
+            return;
+        }
+        if (!routerMAC) {
+            msgEl.className = 'msg err';
+            msgEl.textContent = 'No se detectó la dirección MAC. Conéctate desde el WiFi y recarga.';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spin"></span>Verificando…';
+
+        try {
+            // 1. Login
+            const loginRes = await fetch(API + '/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const loginData = await loginRes.json();
+            if (!loginRes.ok) {
+                const errMap = {
+                    'Invalid credentials':         'Usuario o contraseña incorrectos.',
+                    'User is inactive':            'Tu cuenta está inactiva. Contacta al administrador.',
+                    'User account pending approval': 'Tu cuenta aún está pendiente de aprobación.',
+                };
+                msgEl.className = 'msg err';
+                msgEl.textContent = errMap[loginData.detail] || (loginData.detail || 'Error al iniciar sesión.');
+                btn.disabled = false; btn.textContent = 'Agregar este dispositivo a mi cuenta';
+                return;
+            }
+
+            const token = loginData.access_token;
+
+            // 2. Agregar dispositivo
+            const devInfo = JSON.stringify({
+                type: d.type, os: d.os, os_version: d.osVer,
+                browser: d.browser, user_agent: navigator.userAgent
+            });
+            const addRes = await fetch(API + '/auth/add-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({
+                    mac_address: routerMAC,
+                    ip_address: routerIP || null,
+                    device_info: devInfo
+                })
+            });
+            const addData = await addRes.json();
+
+            if (addRes.ok) {
+                // Mostrar pantalla de éxito según estado de aprobación
+                if (addData.approval_status === 'approved') {
+                    showScreen('screenApproved');
+                } else {
+                    showScreen('screenPending');
+                }
+            } else {
+                const errMap = {
+                    'DEVICE_ALREADY_YOURS': 'Este dispositivo ya está en tu cuenta.',
+                    'DEVICE_TAKEN':         'Esta MAC ya está registrada para otro usuario. Contacta al administrador.',
+                    'MAC_RANDOMIZED':       'Tu dispositivo usa MAC aleatoria. Desactívala y vuelve a conectar.',
+                };
+                msgEl.className = 'msg err';
+                msgEl.textContent = errMap[addData.detail] || (addData.detail || 'Error al agregar dispositivo.');
+                btn.disabled = false; btn.textContent = 'Agregar este dispositivo a mi cuenta';
+            }
+        } catch {
+            msgEl.className = 'msg err';
+            msgEl.textContent = 'Error de red. Verifica tu conexión e intenta de nuevo.';
+            btn.disabled = false; btn.textContent = 'Agregar este dispositivo a mi cuenta';
+        }
+    }
+
+    // ── Enviar formulario ──
+    document.getElementById('regForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const fullName    = document.getElementById('fullName').value.trim();
+        const username    = document.getElementById('username').value.trim();
+        const password    = document.getElementById('password').value;
+        const department  = document.getElementById('department').value;
+        const position    = document.getElementById('position').value.trim();
+        const email       = document.getElementById('email').value.trim();
+        const phone       = document.getElementById('phone').value.trim();
+        const btn = document.getElementById('submitBtn');
+        const msg = document.getElementById('msg');
+
+        if (!fullName || !username || !password || !department) {
+            msg.className = 'msg err';
+            msg.textContent = 'Completa los campos requeridos (nombre, usuario, contraseña y departamento).';
+            return;
+        }
+        if (password.length < 6) {
+            msg.className = 'msg err';
+            msg.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+            return;
+        }
+
+        msg.className = 'msg';
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spin"></span>Enviando…';
+
+        const deviceInfo = JSON.stringify({
+            type: d.type, os: d.os, os_version: d.osVer,
+            browser: d.browser, browser_version: d.bVer,
+            screen: window.screen.width + 'x' + window.screen.height,
+            language: navigator.language,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            user_agent: navigator.userAgent
+        });
+
+        try {
+            const res = await fetch(API + '/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username, password,
+                    full_name:            fullName,
+                    department:           department      || null,
+                    position:             position        || null,
+                    email:                email           || null,
+                    phone:                phone           || null,
+                    mac_address:          routerMAC       || null,
+                    ip_address:           routerIP        || null,
+                    device_info:          deviceInfo
+                })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                showScreen('screenSuccess');
+
+                let secs = 15;
+                const ct = document.getElementById('countdown');
+                ct.textContent = 'Redirigiendo en ' + secs + 's…';
+                const t = setInterval(() => {
+                    secs--;
+                    if (secs <= 0) { clearInterval(t); location.href = '/'; }
+                    else ct.textContent = 'Redirigiendo en ' + secs + 's…';
+                }, 1000);
+            } else {
+                msg.className = 'msg err';
+                // Dispositivo o usuario ya registrado → mostrar pantalla de estado
+                if (data.detail && data.detail.startsWith('ALREADY_REGISTERED:')) {
+                    const regStatus = data.detail.split(':')[1];
+                    const screenMap = {
+                        pending:  'screenPending',
+                        approved: 'screenApproved',
+                        rejected: 'screenRejected'
+                    };
+                    showScreen(screenMap[regStatus] || 'screenPending');
+                    return;
+                }
+
+                const errMap = {
+                    'MAC_RANDOMIZED': 'Tu dispositivo usa MAC aleatoria. Desactívala y vuelve a conectarte al WiFi.'
+                };
+                msg.textContent = errMap[data.detail] || data.detail || 'Error al registrar. Intenta de nuevo.';
+                btn.disabled = false;
+                btn.textContent = 'Solicitar acceso';
+            }
+        } catch {
+            msg.className = 'msg err';
+            msg.textContent = 'Error de red. Verifica tu conexión e intenta de nuevo.';
+            btn.disabled = false;
+            btn.textContent = 'Solicitar acceso';
+        }
+    });
+})();
+</script>
+</body>
+</html>

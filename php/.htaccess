@@ -1,0 +1,26 @@
+# NAC — front controller PHP
+DirectoryIndex index.php
+
+# Asegurar que el header Authorization llegue a PHP (LiteSpeed/Apache)
+CGIPassAuth On
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Propagar Authorization si CGIPassAuth no bastara
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Servir archivos estáticos existentes directamente (p. ej. /static/app.js)
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+
+    # Todo lo demás al front controller
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# Bloquear acceso directo a código de soporte
+<FilesMatch "\.(sqlite3|db)$">
+    Require all denied
+</FilesMatch>
+RedirectMatch 403 ^/(lib|api)/.*\.php$
